@@ -1,0 +1,17 @@
+name: StackEngineX
+version: 1.0
+main: me.phuc.stackenginex.StackEngine
+api-version: 1.21
+author: Phuc
+description: Hardcore Stored Stack System
+
+commands:
+  stackenginex:
+    description: Reload plugin
+    usage: /stackenginex reload
+    permission: stackenginex.admin
+    aliases: [sex]
+
+permissions:
+  stackenginex.admin:
+    default: op
