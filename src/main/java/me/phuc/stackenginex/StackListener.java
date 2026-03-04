@@ -19,13 +19,30 @@ public class StackListener implements Listener {
 
         if (!(event.getEntity() instanceof Player player)) return;
 
-        ItemStack item = event.getItem().getItemStack();
-
-        // Chỉ chỉnh những item mặc định stack 64
-        if (item.getType().getMaxStackSize() != 64) return;
-
+        ItemStack picked = event.getItem().getItemStack();
         int maxStack = plugin.getConfig().getInt("max-stack-size", 128);
 
-        item.setMaxStackSize(maxStack);
+        // Chỉ xử lý item mặc định stack 64
+        if (picked.getType().getMaxStackSize() != 64) return;
+
+        for (ItemStack content : player.getInventory().getContents()) {
+            if (content == null) continue;
+
+            if (!content.isSimilar(picked)) continue;
+
+            if (content.getAmount() >= maxStack) continue;
+
+            int space = maxStack - content.getAmount();
+            int transfer = Math.min(space, picked.getAmount());
+
+            content.setAmount(content.getAmount() + transfer);
+            picked.setAmount(picked.getAmount() - transfer);
+
+            if (picked.getAmount() <= 0) {
+                event.getItem().remove();
+                event.setCancelled(true);
+                return;
+            }
+        }
     }
 }
