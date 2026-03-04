@@ -1,5 +1,6 @@
 package me.phuc.stackenginex;
 
+import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class StackEngine extends JavaPlugin {
@@ -14,11 +15,10 @@ public final class StackEngine extends JavaPlugin {
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
-        getLogger().info("StackEngineX Enabled.");
-    }
 
-    @Override
-    public void onDisable() {
-        getLogger().info("StackEngineX Disabled.");
+        Bukkit.getPluginManager().registerEvents(
+                new BlockBreakListener(), this);
+
+        getLogger().info("StackEngineX Enabled.");
     }
 }
