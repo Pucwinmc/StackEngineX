@@ -1,0 +1,12 @@
+stack:
+  enabled: true
+  default-max: 1024
+
+stored:
+  enabled: true
+  max-per-item: 1000000
+  start-when-empty-slots-below: 2
+
+messages:
+  prefix: "&8[&6StackEngineX&8] "
+  reload: "&aĐã reload StackEngineX."
