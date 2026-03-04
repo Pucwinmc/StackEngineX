@@ -1,7 +1,7 @@
 package me.phuc.stackenginex;
 
 import org.bukkit.NamespacedKey;
-import org.bukkit.enchantments.Enchantment;
+import org.bukkit.Registry;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -29,11 +29,17 @@ public class StoredManager {
         long total = Math.min(current + amount, max);
 
         ItemMeta meta = item.getItemMeta();
+
         meta.getPersistentDataContainer()
                 .set(KEY, PersistentDataType.LONG, total);
 
-        meta.addEnchant(Enchantment.LUCK, 1, true);
-        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        var luck = Registry.ENCHANTMENT.get(
+                NamespacedKey.minecraft("luck"));
+
+        if (luck != null) {
+            meta.addEnchant(luck, 1, true);
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        }
 
         item.setItemMeta(meta);
     }
