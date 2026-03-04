@@ -1,5 +1,0 @@
-max-stack-size: 128
-
-messages:
-  reload-success: "&a[StackEngineX] Reload thành công!"
-  no-permission: "&cBạn không có quyền sử dụng lệnh này!"
