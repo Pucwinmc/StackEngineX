@@ -1,0 +1,43 @@
+name: StackEngine
+version: 1.0
+main: me.phuc.stackengine.StackEngine
+api-version: 1.21
+author: Phuc
+description: Hardcore Economy Stack System (Stored + AntiLag + Tax)
+
+load: POSTWORLD
+
+softdepend:
+  - Vault
+  - EconomyShopGUI
+  - AdvancedEnchantments
+  - PlaceholderAPI
+
+commands:
+  stackengine:
+    description: StackEngine main command
+    usage: /stackengine reload
+    permission: stackengine.admin
+    aliases: [se]
+
+permissions:
+
+  stackengine.admin:
+    description: Allows admin control
+    default: op
+
+  stackengine.bypass.ratelimit:
+    description: Bypass stored rate limit
+    default: op
+
+  stackengine.limit.vip:
+    description: Increase stack limit to 2048
+    default: false
+
+  stackengine.limit.mvp:
+    description: Increase stack limit to 4096
+    default: false
+
+  stackengine.unlimited:
+    description: Unlimited stack
+    default: op
