@@ -14,6 +14,8 @@ public final class StackEngineX extends JavaPlugin {
 
         SettingsManager.load(this);
 
+        getServer().getPluginManager().registerEvents(new BlockBreakListener(), this);
+
         getLogger().info("StackEngineX enabled!");
     }
 
