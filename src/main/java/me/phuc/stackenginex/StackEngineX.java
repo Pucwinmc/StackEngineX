@@ -1,21 +1,33 @@
 package me.phuc.stackenginex;
 
+import org.bukkit.Bukkit;
+import org.bukkit.NamespacedKey;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class StackEngineX extends JavaPlugin {
 
+    private static StackEngineX instance;
+    private NamespacedKey storedKey;
+
     @Override
     public void onEnable() {
-        saveDefaultConfig();
+        instance = this;
 
-        // Đăng ký sự kiện auto stack khi nhặt item
-        getServer().getPluginManager().registerEvents(new StackListener(this), this);
+        storedKey = new NamespacedKey(this, "stored");
 
-        getLogger().info("StackEngineX đã bật!");
+        Bukkit.getPluginManager().registerEvents(
+                new StackListener(this),
+                this
+        );
+
+        getLogger().info("StackEngineX enabled.");
     }
 
-    @Override
-    public void onDisable() {
-        getLogger().info("StackEngineX đã tắt!");
+    public static StackEngineX getInstance() {
+        return instance;
+    }
+
+    public NamespacedKey getStoredKey() {
+        return storedKey;
     }
 }
