@@ -56,10 +56,16 @@ public class StoredManager {
 
         if (stored > 0) {
 
-            // ===== GLOW =====
+            // ===== SAFE GLOW =====
             if (SettingsManager.GLOWING) {
-                meta.addEnchant(Enchantment.LUCK, 1, true);
-                meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+
+                Enchantment glow =
+                        Enchantment.getByKey(NamespacedKey.minecraft("unbreaking"));
+
+                if (glow != null) {
+                    meta.addEnchant(glow, 1, true);
+                    meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+                }
             }
 
             // ===== LORE =====
@@ -81,8 +87,15 @@ public class StoredManager {
             }
 
         } else {
-            // Xoá glow + lore nếu hết stored
-            meta.removeEnchant(Enchantment.LUCK);
+
+            // REMOVE GLOW SAFE
+            Enchantment glow =
+                    Enchantment.getByKey(NamespacedKey.minecraft("unbreaking"));
+
+            if (glow != null) {
+                meta.removeEnchant(glow);
+            }
+
             meta.setLore(null);
         }
 
