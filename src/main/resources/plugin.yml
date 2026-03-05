@@ -1,9 +1,9 @@
-name: StackEngine
+name: StackEngineX
 version: 1.0
 main: me.phuc.stackenginex.StackEngine
 api-version: 1.20
-author: Phuc
-description: Hardcore Stored Stack System
+author: Pucwinmc
+description: Item Stack Engine
 
 commands:
   stackenginex:
