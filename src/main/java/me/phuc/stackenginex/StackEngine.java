@@ -66,7 +66,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         return defaultMax;
     }
 
-    // ================= PICKUP =================
+    // ================= FIXED PICKUP =================
     @EventHandler
     public void onPickup(EntityPickupItemEvent e) {
 
@@ -83,9 +83,13 @@ public class StackEngine extends JavaPlugin implements Listener {
             Inventory inv = player.getInventory();
 
             int total = 0;
+
             for (ItemStack item : inv.getContents()) {
-                if (item == null || item.getType() != type) continue;
+                if (item == null) continue;
+                if (item.getType() != type) continue;
+
                 total += item.getAmount();
+
                 Integer stored = getStored(item);
                 if (stored != null) total += stored;
             }
@@ -93,19 +97,32 @@ public class StackEngine extends JavaPlugin implements Listener {
             int max = getMax(player);
             if (total <= max) return;
 
-            inv.remove(type);
+            // XÓA TỪNG SLOT thay vì remove(type)
+            for (int i = 0; i < inv.getSize(); i++) {
+                ItemStack item = inv.getItem(i);
+                if (item == null) continue;
+                if (item.getType() == type) {
+                    inv.clear(i);
+                }
+            }
 
             int base = 64;
-            int stored = total - base;
+            int storedAmount = total - base;
+
+            if (storedAmount < 0) storedAmount = 0;
 
             ItemStack newItem = new ItemStack(type, base);
-            applyStored(newItem, stored);
+
+            if (storedAmount > 0) {
+                applyStored(newItem, storedAmount);
+            }
+
             inv.addItem(newItem);
 
         }, 1L);
     }
 
-    // ================= REFILL CHUẨN =================
+    // ================= REFILL =================
     @EventHandler
     public void onPlace(BlockPlaceEvent e) {
 
@@ -120,15 +137,15 @@ public class StackEngine extends JavaPlugin implements Listener {
             ItemStack hand = p.getInventory().getItemInMainHand();
             if (hand == null || hand.getType() == Material.AIR) return;
 
-            int currentAmount = hand.getAmount();
-            int missingTo64 = 64 - currentAmount;
+            int current = hand.getAmount();
+            int missing = 64 - current;
 
-            if (missingTo64 <= 0) return;
+            if (missing <= 0) return;
 
-            int refillAmount = Math.min(missingTo64, stored);
-            int newStored = stored - refillAmount;
+            int refill = Math.min(missing, stored);
+            int newStored = stored - refill;
 
-            hand.setAmount(currentAmount + refillAmount);
+            hand.setAmount(current + refill);
 
             if (newStored <= 0) {
                 clearStored(hand);
