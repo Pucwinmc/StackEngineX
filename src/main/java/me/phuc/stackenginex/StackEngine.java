@@ -126,27 +126,40 @@ public class StackEngine extends JavaPlugin implements Listener {
         }, 1L);
     }
 
-    // ================== PLACE REFILL ==================
+    // ================== PLACE REFILL (FIXED) ==================
     @EventHandler
     public void onPlace(BlockPlaceEvent e) {
 
-        ItemStack item = e.getItemInHand();
-        Integer stored = getStored(item);
-        if (stored == null || stored <= 0) return;
+        Player player = e.getPlayer();
+        ItemStack beforePlace = e.getItemInHand();
 
-        Player p = e.getPlayer();
+        Integer stored = getStored(beforePlace);
+        if (stored == null || stored <= 0) return;
 
         Bukkit.getScheduler().runTaskLater(this, () -> {
 
-            ItemStack hand = p.getInventory().getItemInMainHand();
-            if (hand.getType() == Material.AIR) {
+            ItemStack current = player.getInventory().getItemInMainHand();
+            int remainingStored = stored - 1;
 
-                ItemStack restore = new ItemStack(item.getType(), 1);
-                applyStored(restore, stored - 1);
-                p.getInventory().setItemInMainHand(restore);
+            // Nếu stack biến mất (trước đó chỉ có 1 block)
+            if (current == null || current.getType() == Material.AIR) {
 
-            } else {
-                applyStored(hand, stored - 1);
+                if (remainingStored <= 0) return;
+
+                ItemStack refill = new ItemStack(beforePlace.getType(), 1);
+                applyStored(refill, remainingStored);
+                player.getInventory().setItemInMainHand(refill);
+                return;
+            }
+
+            // Nếu vẫn còn block trong tay
+            if (current.getType() == beforePlace.getType()) {
+
+                if (remainingStored <= 0) {
+                    clearStored(current);
+                } else {
+                    applyStored(current, remainingStored);
+                }
             }
 
         }, 1L);
@@ -188,7 +201,7 @@ public class StackEngine extends JavaPlugin implements Listener {
     // ================== STORED ==================
     private Integer getStored(ItemStack item) {
 
-        if (!item.hasItemMeta()) return null;
+        if (item == null || !item.hasItemMeta()) return null;
 
         return item.getItemMeta().getPersistentDataContainer()
                 .get(storedKey, PersistentDataType.INTEGER);
@@ -223,7 +236,7 @@ public class StackEngine extends JavaPlugin implements Listener {
 
     private void clearStored(ItemStack item) {
 
-        if (!item.hasItemMeta()) return;
+        if (item == null || !item.hasItemMeta()) return;
 
         ItemMeta meta = item.getItemMeta();
         meta.getPersistentDataContainer().remove(storedKey);
