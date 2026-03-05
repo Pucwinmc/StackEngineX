@@ -7,6 +7,9 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class StoredManager {
 
     private static final NamespacedKey KEY =
@@ -36,10 +39,26 @@ public class StoredManager {
         meta.getPersistentDataContainer()
                 .set(KEY, PersistentDataType.LONG, total);
 
-        // Glow
-        meta.addEnchant(Enchantment.UNBREAKING, 1, true);
-        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        updateLore(meta, item.getAmount(), total);
+
+        // Glow nếu có stored
+        if (total > 0) {
+            meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        }
 
         item.setItemMeta(meta);
+    }
+
+    private static void updateLore(ItemMeta meta, int amount, long stored) {
+
+        List<String> lore = new ArrayList<>();
+
+        lore.add("§8§m----------------");
+        lore.add("§eStored: §6" + stored);
+        lore.add("§7Total: §f" + (amount + stored));
+        lore.add("§8§m----------------");
+
+        meta.setLore(lore);
     }
 }
