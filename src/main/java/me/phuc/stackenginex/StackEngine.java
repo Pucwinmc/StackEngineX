@@ -4,8 +4,10 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
@@ -15,7 +17,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
+
+import java.util.List;
 
 public class StackEngine extends JavaPlugin implements Listener {
 
@@ -24,93 +27,116 @@ public class StackEngine extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         storedKey = new NamespacedKey(this, "stored");
-
         Bukkit.getPluginManager().registerEvents(this, this);
-
-        // Tick auto stack mỗi 20 tick (1s)
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                autoStackTick();
-            }
-        }.runTaskTimer(this, 20L, 20L);
-
-        getLogger().info("StackEngineX FULL ENABLED");
+        getLogger().info("StackEngine Survival Ready");
     }
 
-    // ==============================
-    // AUTO STACK & REFILL
-    // ==============================
-    private void autoStackTick() {
-
-        Bukkit.getOnlinePlayers().forEach(player -> {
-
-            Inventory inv = player.getInventory();
-
-            for (int i = 0; i < inv.getSize(); i++) {
-
-                ItemStack item = inv.getItem(i);
-                if (!isValid(item)) continue;
-
-                ItemMeta meta = item.getItemMeta();
-                int stored = getStored(meta);
-                int amount = item.getAmount();
-
-                // STACK >64 vào stored
-                if (amount > 64) {
-                    stored += (amount - 64);
-                    item.setAmount(64);
-                }
-
-                // REFILL nếu <64
-                if (amount < 64 && stored > 0) {
-                    int need = 64 - amount;
-                    int take = Math.min(need, stored);
-
-                    item.setAmount(amount + take);
-                    stored -= take;
-                }
-
-                applyStored(item, meta, stored);
-            }
-        });
-    }
-
-    // ==============================
-    // KHI ĐẶT BLOCK → TRỪ STORED
-    // ==============================
+    // ===============================
+    // STACK SAU KHI NHẶT ITEM
+    // ===============================
     @EventHandler
-    public void onPlace(BlockPlaceEvent e) {
+    public void onPickup(EntityPickupItemEvent e) {
 
-        ItemStack item = e.getItemInHand();
-        if (!isValid(item)) return;
+        if (!(e.getEntity() instanceof Player player)) return;
 
-        ItemMeta meta = item.getItemMeta();
-        int stored = getStored(meta);
-
-        if (stored <= 0) return;
-
+        // Delay 1 tick để Minecraft cho item vào inventory trước
         Bukkit.getScheduler().runTaskLater(this, () -> {
 
-            ItemStack hand = e.getPlayer().getInventory().getItemInMainHand();
-            if (!isValid(hand)) return;
+            Material type = e.getItem().getItemStack().getType();
+            Inventory inv = player.getInventory();
 
-            ItemMeta newMeta = hand.getItemMeta();
-            int newStored = getStored(newMeta);
+            int total = 0;
 
-            if (hand.getAmount() < 64 && newStored > 0) {
-                hand.setAmount(hand.getAmount() + 1);
-                newStored--;
+            // Cộng tổng tất cả stack cùng loại
+            for (ItemStack item : inv.getContents()) {
+                if (item == null) continue;
+                if (item.getType() != type) continue;
 
-                applyStored(hand, newMeta, newStored);
+                total += item.getAmount();
+
+                ItemMeta meta = item.getItemMeta();
+                if (meta != null) {
+                    Integer stored = meta.getPersistentDataContainer()
+                            .get(storedKey, PersistentDataType.INTEGER);
+                    if (stored != null) total += stored;
+                }
             }
+
+            if (total <= 64) return;
+
+            // Xoá tất cả stack cùng loại
+            for (int i = 0; i < inv.getSize(); i++) {
+                ItemStack item = inv.getItem(i);
+                if (item == null) continue;
+                if (item.getType() == type) {
+                    inv.setItem(i, null);
+                }
+            }
+
+            // Tạo stack mới
+            ItemStack newStack = new ItemStack(type, 64);
+            int storedAmount = total - 64;
+
+            ItemMeta meta = newStack.getItemMeta();
+            meta.getPersistentDataContainer()
+                    .set(storedKey, PersistentDataType.INTEGER, storedAmount);
+
+            meta.setLore(List.of("§eStored: §f" + storedAmount));
+            meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+
+            newStack.setItemMeta(meta);
+
+            inv.addItem(newStack);
 
         }, 1L);
     }
 
-    // ==============================
+    // ===============================
+    // REFILL KHI ĐẶT BLOCK
+    // ===============================
+    @EventHandler
+    public void onPlace(BlockPlaceEvent e) {
+
+        ItemStack item = e.getItemInHand();
+        if (item == null) return;
+
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return;
+
+        Integer stored = meta.getPersistentDataContainer()
+                .get(storedKey, PersistentDataType.INTEGER);
+
+        if (stored == null || stored <= 0) return;
+
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+
+            ItemStack hand = e.getPlayer().getInventory().getItemInMainHand();
+            if (hand == null) return;
+
+            ItemMeta m = hand.getItemMeta();
+            if (m == null) return;
+
+            int newStored = stored - 1;
+
+            if (newStored <= 0) {
+                m.getPersistentDataContainer().remove(storedKey);
+                m.setLore(null);
+                m.removeEnchant(Enchantment.UNBREAKING);
+            } else {
+                m.getPersistentDataContainer()
+                        .set(storedKey, PersistentDataType.INTEGER, newStored);
+                m.setLore(List.of("§eStored: §f" + newStored));
+            }
+
+            hand.setItemMeta(m);
+
+        }, 1L);
+    }
+
+    // ===============================
     // BỎ VÀO RƯƠNG → UNSTACK
-    // ==============================
+    // ===============================
     @EventHandler
     public void onChestClick(InventoryClickEvent e) {
 
@@ -119,59 +145,27 @@ public class StackEngine extends JavaPlugin implements Listener {
         if (e.getCurrentItem() == null) return;
 
         ItemStack item = e.getCurrentItem();
-        if (!isValid(item)) return;
-
         ItemMeta meta = item.getItemMeta();
-        int stored = getStored(meta);
-        if (stored <= 0) return;
+        if (meta == null) return;
+
+        Integer stored = meta.getPersistentDataContainer()
+                .get(storedKey, PersistentDataType.INTEGER);
+
+        if (stored == null || stored <= 0) return;
 
         e.setCancelled(true);
 
         Inventory chest = e.getClickedInventory();
 
-        // Set lại item còn 64
-        item.setAmount(64);
-        applyStored(item, meta, 0);
+        // reset item
+        meta.getPersistentDataContainer().remove(storedKey);
+        meta.setLore(null);
+        meta.removeEnchant(Enchantment.UNBREAKING);
+        item.setItemMeta(meta);
 
-        // Thêm từng item lẻ vào rương
+        // thêm item dư vào rương
         for (int i = 0; i < stored; i++) {
             chest.addItem(new ItemStack(item.getType(), 1));
         }
-    }
-
-    // ==============================
-    // HELPER METHODS
-    // ==============================
-    private boolean isValid(ItemStack item) {
-        return item != null &&
-                item.getType() != Material.AIR &&
-                item.getMaxStackSize() > 1 &&
-                item.hasItemMeta();
-    }
-
-    private int getStored(ItemMeta meta) {
-        Integer stored = meta.getPersistentDataContainer()
-                .get(storedKey, PersistentDataType.INTEGER);
-        return stored == null ? 0 : stored;
-    }
-
-    private void applyStored(ItemStack item, ItemMeta meta, int stored) {
-
-        if (stored <= 0) {
-            meta.getPersistentDataContainer().remove(storedKey);
-            meta.setLore(null);
-            meta.removeEnchant(Enchantment.UNBREAKING);
-            item.setItemMeta(meta);
-            return;
-        }
-
-        meta.getPersistentDataContainer()
-                .set(storedKey, PersistentDataType.INTEGER, stored);
-
-        meta.setLore(java.util.List.of("§eStored: §f" + stored));
-        meta.addEnchant(Enchantment.UNBREAKING, 1, true);
-        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-
-        item.setItemMeta(meta);
     }
 }
