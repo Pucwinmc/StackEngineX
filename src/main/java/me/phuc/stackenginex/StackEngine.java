@@ -1,36 +1,89 @@
 package me.phuc.stackenginex;
 
-import org.bukkit.Bukkit;
-import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
+import org.bukkit.*;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
+import org.bukkit.event.*;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
-import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.*;
 import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class StackEngine extends JavaPlugin implements Listener {
 
     private NamespacedKey storedKey;
 
+    private int defaultMax;
+    private boolean only64;
+    private boolean glow;
+    private boolean loreEnabled;
+    private boolean actionbarEnabled;
+
+    private Map<String, Integer> permissionLimits = new HashMap<>();
+
     @Override
     public void onEnable() {
+
+        saveDefaultConfig();
+        loadConfigValues();
+
         storedKey = new NamespacedKey(this, "stored");
+
         Bukkit.getPluginManager().registerEvents(this, this);
-        getLogger().info("StackEngine FULL FIXED");
+        getCommand("stack").setExecutor((sender, cmd, label, args) -> {
+            if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
+                reloadConfig();
+                loadConfigValues();
+                sender.sendMessage(ChatColor.GREEN + "StackEngine reloaded!");
+                return true;
+            }
+            return false;
+        });
+
+        startActionbarTask();
+
+        getLogger().info("StackEngine FULL Loaded!");
+    }
+
+    private void loadConfigValues() {
+
+        defaultMax = getConfig().getInt("stack.default-max");
+        only64 = getConfig().getBoolean("stack.only-64-stackable");
+        glow = getConfig().getBoolean("stored.glowing-when-stored");
+        loreEnabled = getConfig().getBoolean("stored.lore.enabled");
+        actionbarEnabled = getConfig().getBoolean("actionbar.enabled");
+
+        permissionLimits.clear();
+        ConfigurationSection section =
+                getConfig().getConfigurationSection("stack.permission-limits");
+
+        if (section != null) {
+            for (String key : section.getKeys(false)) {
+                permissionLimits.put(key, section.getInt(key));
+            }
+        }
+    }
+
+    private int getMax(Player player) {
+
+        for (Map.Entry<String, Integer> e : permissionLimits.entrySet()) {
+            if (player.hasPermission(e.getKey())) {
+                if (e.getValue() == -1) return Integer.MAX_VALUE;
+                return e.getValue();
+            }
+        }
+        return defaultMax;
     }
 
     // ===============================
-    // STACK SAU KHI NHẶT
+    // PICKUP STACK
     // ===============================
     @EventHandler
     public void onPickup(EntityPickupItemEvent e) {
@@ -39,138 +92,178 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         Bukkit.getScheduler().runTaskLater(this, () -> {
 
-            Material type = e.getItem().getItemStack().getType();
-            Inventory inv = player.getInventory();
+            ItemStack picked = e.getItem().getItemStack();
+            Material type = picked.getType();
+
+            if (only64 && type.getMaxStackSize() != 64) return;
 
             int total = 0;
+            Inventory inv = player.getInventory();
 
             for (ItemStack item : inv.getContents()) {
-                if (item == null) continue;
-                if (item.getType() != type) continue;
+                if (item == null || item.getType() != type) continue;
 
                 total += item.getAmount();
 
-                ItemMeta meta = item.getItemMeta();
-                if (meta != null) {
-                    Integer stored = meta.getPersistentDataContainer()
-                            .get(storedKey, PersistentDataType.INTEGER);
-                    if (stored != null) total += stored;
-                }
+                Integer stored = getStored(item);
+                if (stored != null) total += stored;
             }
 
-            if (total <= 64) return;
+            int max = getMax(player);
 
-            for (int i = 0; i < inv.getSize(); i++) {
-                ItemStack item = inv.getItem(i);
-                if (item == null) continue;
-                if (item.getType() == type) {
-                    inv.setItem(i, null);
-                }
-            }
+            if (total <= max) return;
 
-            ItemStack newStack = new ItemStack(type, 64);
-            int storedAmount = total - 64;
+            inv.remove(type);
 
-            ItemMeta meta = newStack.getItemMeta();
-            meta.getPersistentDataContainer()
-                    .set(storedKey, PersistentDataType.INTEGER, storedAmount);
+            int base = Math.min(64, max);
+            int stored = total - base;
 
-            meta.setLore(List.of("§eStored: §f" + storedAmount));
-            meta.addEnchant(Enchantment.UNBREAKING, 1, true);
-            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+            ItemStack newItem = new ItemStack(type, base);
+            applyStored(newItem, stored);
 
-            newStack.setItemMeta(meta);
-            inv.addItem(newStack);
+            inv.addItem(newItem);
 
         }, 1L);
     }
 
     // ===============================
-    // FIX REFILL KHÔNG MẤT ITEM
+    // REFILL ON PLACE
     // ===============================
     @EventHandler
     public void onPlace(BlockPlaceEvent e) {
 
         ItemStack item = e.getItemInHand();
-        if (item == null) return;
-
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return;
-
-        Integer stored = meta.getPersistentDataContainer()
-                .get(storedKey, PersistentDataType.INTEGER);
-
+        Integer stored = getStored(item);
         if (stored == null || stored <= 0) return;
 
-        // REFILL NGAY TRONG EVENT
-        int newStored = stored - 1;
+        Player player = e.getPlayer();
 
-        meta.getPersistentDataContainer()
-                .set(storedKey, PersistentDataType.INTEGER, newStored);
-
-        meta.setLore(List.of("§eStored: §f" + newStored));
-
-        item.setItemMeta(meta);
-
-        // Đảm bảo không mất item khi amount về 0
         Bukkit.getScheduler().runTaskLater(this, () -> {
-            ItemStack hand = e.getPlayer().getInventory().getItemInMainHand();
-            if (hand == null || hand.getType() == Material.AIR) {
+
+            ItemStack hand = player.getInventory().getItemInMainHand();
+            if (hand.getType() == Material.AIR && stored > 0) {
 
                 ItemStack restore = new ItemStack(item.getType(), 64);
-                ItemMeta m = restore.getItemMeta();
-
-                if (newStored > 0) {
-                    m.getPersistentDataContainer()
-                            .set(storedKey, PersistentDataType.INTEGER, newStored);
-                    m.setLore(List.of("§eStored: §f" + newStored));
-                    m.addEnchant(Enchantment.UNBREAKING, 1, true);
-                    m.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-                }
-
-                restore.setItemMeta(m);
-                e.getPlayer().getInventory().setItemInMainHand(restore);
+                applyStored(restore, stored - 1);
+                player.getInventory().setItemInMainHand(restore);
+            } else {
+                applyStored(hand, stored - 1);
             }
 
         }, 1L);
     }
 
     // ===============================
-    // UNSTACK ĐÚNG TRONG RƯƠNG
+    // CONTAINER AUTO UNSTACK
     // ===============================
     @EventHandler
-    public void onChestClick(InventoryClickEvent e) {
-
-        if (!(e.getWhoClicked() instanceof Player)) return;
+    public void onClick(InventoryClickEvent e) {
 
         Inventory top = e.getView().getTopInventory();
         if (top == null) return;
 
-        // Chỉ khi click vào rương (top inventory)
-        if (e.getClickedInventory() != top) return;
+        Bukkit.getScheduler().runTaskLater(this,
+                () -> unstackContainer(top), 1L);
+    }
 
-        ItemStack item = e.getCurrentItem();
-        if (item == null) return;
+    private void unstackContainer(Inventory inv) {
+
+        for (int i = 0; i < inv.getSize(); i++) {
+
+            ItemStack item = inv.getItem(i);
+            if (item == null) continue;
+
+            Integer stored = getStored(item);
+            if (stored == null || stored <= 0) continue;
+
+            Material type = item.getType();
+            clearStored(item);
+
+            while (stored > 0) {
+                int give = Math.min(64, stored);
+                inv.addItem(new ItemStack(type, give));
+                stored -= give;
+            }
+        }
+    }
+
+    // ===============================
+    // STORED HANDLING
+    // ===============================
+    private Integer getStored(ItemStack item) {
+
+        if (item == null || !item.hasItemMeta()) return null;
+
+        return item.getItemMeta().getPersistentDataContainer()
+                .get(storedKey, PersistentDataType.INTEGER);
+    }
+
+    private void applyStored(ItemStack item, int amount) {
+
+        if (amount <= 0) {
+            clearStored(item);
+            return;
+        }
 
         ItemMeta meta = item.getItemMeta();
-        if (meta == null) return;
 
-        Integer stored = meta.getPersistentDataContainer()
-                .get(storedKey, PersistentDataType.INTEGER);
+        meta.getPersistentDataContainer()
+                .set(storedKey, PersistentDataType.INTEGER, amount);
 
-        if (stored == null || stored <= 0) return;
+        if (glow) {
+            meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        }
 
-        e.setCancelled(true);
+        if (loreEnabled) {
+            int total = item.getAmount() + amount;
+            meta.setLore(List.of(
+                    ChatColor.GRAY + "Stored: " + ChatColor.GOLD + amount,
+                    ChatColor.GRAY + "Total: " + ChatColor.WHITE + total
+            ));
+        }
 
-        // Reset stack trong rương
+        item.setItemMeta(meta);
+    }
+
+    private void clearStored(ItemStack item) {
+
+        if (item == null || !item.hasItemMeta()) return;
+
+        ItemMeta meta = item.getItemMeta();
         meta.getPersistentDataContainer().remove(storedKey);
         meta.setLore(null);
         meta.removeEnchant(Enchantment.UNBREAKING);
         item.setItemMeta(meta);
+    }
 
-        // Thêm item dư vào chính RƯƠNG
-        for (int i = 0; i < stored; i++) {
-            top.addItem(new ItemStack(item.getType(), 1));
-        }
+    // ===============================
+    // ACTIONBAR
+    // ===============================
+    private void startActionbarTask() {
+
+        if (!actionbarEnabled) return;
+
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+
+                for (Player player : Bukkit.getOnlinePlayers()) {
+
+                    ItemStack item = player.getInventory().getItemInMainHand();
+                    Integer stored = getStored(item);
+
+                    if (stored == null || stored <= 0) continue;
+
+                    int total = item.getAmount() + stored;
+
+                    String format = getConfig().getString("actionbar.format");
+                    format = format.replace("{stored}", String.valueOf(stored));
+                    format = format.replace("{total}", String.valueOf(total));
+
+                    player.sendActionBar(ChatColor.translateAlternateColorCodes('&', format));
+                }
+            }
+        }.runTaskTimer(this, 20L, getConfig().getInt("actionbar.update-interval-ticks"));
     }
 }
