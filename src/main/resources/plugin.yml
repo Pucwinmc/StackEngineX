@@ -5,5 +5,4 @@ api-version: 1.21
 
 commands:
   stack:
-    description: StackEngine main command
-    usage: /stack reload
+    description: StackEngine command
