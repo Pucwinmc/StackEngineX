@@ -1,8 +1,7 @@
 package me.phuc.stackenginex;
 
-import com.destroystokyo.paper.event.player.PlayerAttemptPickupItemEvent;
+import io.papermc.paper.event.player.PlayerAttemptPickupItemEvent;
 import org.bukkit.Bukkit;
-import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
@@ -20,94 +19,95 @@ import java.util.List;
 
 public class StackEngine extends JavaPlugin implements Listener {
 
+    private final int MAX_STACK = 128;
+
     @Override
     public void onEnable() {
         Bukkit.getPluginManager().registerEvents(this, this);
         getLogger().info("StackEngine chạy chuẩn Paper 1.21.4!");
     }
 
-    // ===== PICKUP EVENT (PAPER 1.21.4) =====
+    // ================= PICKUP =================
     @EventHandler
     public void onPickup(PlayerAttemptPickupItemEvent e) {
 
         Player player = e.getPlayer();
         Item entity = e.getItem();
-        ItemStack groundItem = entity.getItemStack();
+        ItemStack ground = entity.getItemStack();
 
-        if (groundItem.getType().isAir()) return;
+        if (ground.getType().isAir()) return;
 
-        Inventory inv = player.getInventory();
+        int amountLeft = ground.getAmount();
 
-        int amountToPickup = groundItem.getAmount();
-        int maxVanilla = groundItem.getMaxStackSize(); // 64
+        for (ItemStack invItem : player.getInventory().getContents()) {
 
-        for (ItemStack item : inv.getContents()) {
-            if (item == null) continue;
-            if (!item.isSimilar(groundItem)) continue;
+            if (invItem == null) continue;
+            if (!invItem.isSimilar(ground)) continue;
 
-            int stored = getStored(item);
-            int total = item.getAmount() + stored;
+            int stored = getStored(invItem);
+            int total = invItem.getAmount() + stored;
 
-            if (total >= 128) continue;
+            if (total >= MAX_STACK) continue;
 
-            int free = 128 - total;
-            int move = Math.min(free, amountToPickup);
+            int space = MAX_STACK - total;
+            int move = Math.min(space, amountLeft);
 
             total += move;
-            amountToPickup -= move;
+            amountLeft -= move;
 
-            int newAmount = Math.min(total, maxVanilla);
-            int newStored = total - newAmount;
+            int vanilla = Math.min(64, total);
+            int newStored = total - vanilla;
 
-            item.setAmount(newAmount);
-            setStored(item, newStored);
+            invItem.setAmount(vanilla);
+            setStored(invItem, newStored);
+            addGlow(invItem);
 
-            addGlow(item);
-
-            if (amountToPickup <= 0) break;
+            if (amountLeft <= 0) break;
         }
 
-        if (amountToPickup <= 0) {
+        if (amountLeft <= 0) {
             entity.remove();
             e.setCancelled(true);
         } else {
-            groundItem.setAmount(amountToPickup);
+            ground.setAmount(amountLeft);
         }
     }
 
-    // ===== REFILL WHEN PLACE =====
+    // ================= REFILL =================
     @EventHandler
     public void onPlace(BlockPlaceEvent e) {
+
         ItemStack item = e.getItemInHand();
-        if (item == null) return;
 
         Bukkit.getScheduler().runTaskLater(this, () -> {
+
             if (item.getAmount() == 0) {
+
                 int stored = getStored(item);
-                if (stored > 0) {
+                if (stored <= 0) return;
 
-                    int refill = Math.min(64, stored);
-                    int newStored = stored - refill;
+                int refill = Math.min(64, stored);
+                int newStored = stored - refill;
 
-                    item.setAmount(refill);
-                    setStored(item, newStored);
-                    addGlow(item);
-                }
+                item.setAmount(refill);
+                setStored(item, newStored);
+                addGlow(item);
             }
+
         }, 1L);
     }
 
-    // ===== UNSTACK INTO CHEST =====
+    // ================= UNSTACK TO CHEST =================
     @EventHandler
     public void onClick(InventoryClickEvent e) {
 
         if (!(e.getWhoClicked() instanceof Player)) return;
         if (e.getCurrentItem() == null) return;
+        if (e.getClickedInventory() == null) return;
 
-        Inventory clicked = e.getClickedInventory();
-        if (clicked == null) return;
+        Inventory inv = e.getClickedInventory();
 
-        if (clicked.getHolder() instanceof Player) return; // chỉ xử lý chest
+        if (inv.getHolder() instanceof Player) return;
 
         ItemStack item = e.getCurrentItem();
         int stored = getStored(item);
@@ -118,19 +118,19 @@ public class StackEngine extends JavaPlugin implements Listener {
         int newStored = stored - move;
 
         ItemStack extra = new ItemStack(item.getType(), move);
-        clicked.addItem(extra);
+        inv.addItem(extra);
 
         setStored(item, newStored);
     }
 
-    // ===== LORE STORAGE =====
+    // ================= STORAGE =================
     private int getStored(ItemStack item) {
         if (!item.hasItemMeta()) return 0;
         ItemMeta meta = item.getItemMeta();
         if (!meta.hasLore()) return 0;
 
         for (String line : meta.getLore()) {
-            if (line.contains("Stored:")) {
+            if (line.startsWith("Stored: ")) {
                 return Integer.parseInt(line.replace("Stored: ", ""));
             }
         }
@@ -151,10 +151,11 @@ public class StackEngine extends JavaPlugin implements Listener {
     }
 
     private void addGlow(ItemStack item) {
+
         ItemMeta meta = item.getItemMeta();
+
         if (!meta.hasEnchant(Enchantment.UNBREAKING)) {
             meta.addEnchant(Enchantment.UNBREAKING, 1, true);
-            meta.setEnchantmentGlintOverride(true);
             item.setItemMeta(meta);
         }
     }
