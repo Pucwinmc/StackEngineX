@@ -1,12 +1,206 @@
+# =========================================================
+# StackEngine - Hardcore Economy Edition
+# Stored thông minh - Không phá kinh tế - Chống lag TPS
+# =========================================================
+
+settings:
+  debug: false
+
+# =========================================================
+# STACK CORE
+# =========================================================
+
 stack:
   enabled: true
+  only-64-stackable: true
   default-max: 1024
+
+  permission-limits:
+    stackengine.limit.vip: 2048
+    stackengine.limit.mvp: 4096
+    stackengine.unlimited: -1
+
+# =========================================================
+# STORED SYSTEM
+# =========================================================
 
 stored:
   enabled: true
   max-per-item: 1000000
   start-when-empty-slots-below: 2
+  glowing-when-stored: true
+
+  lore:
+    enabled: true
+    format:
+      - "&8&m----------------"
+      - "&eStored: &6{stored}"
+      - "&7Tổng: &f{total}"
+      - "&8&m----------------"
+
+# =========================================================
+# RATE LIMIT
+# =========================================================
+
+stored-rate-limit:
+  enabled: true
+  max-per-interval: 5
+  interval-milliseconds: 500
+  bypass-permission: "stackengine.bypass.ratelimit"
+
+# =========================================================
+# RESTRICTIONS
+# =========================================================
+
+restrictions:
+  disable-if-silk-touch: true
+
+# =========================================================
+# COMBAT LOCK
+# =========================================================
+
+combat:
+  disable-refill: true
+  combat-seconds: 10
+
+# =========================================================
+# ADVANCED ENCHANTMENTS HOOK
+# =========================================================
+
+advanced-enchantments:
+  enabled: true
+
+  aoe-mining:
+    enabled: true
+    apply-rate-limit-per-block: true
+
+  auto-smelt:
+    enabled: true
+    use-final-result-item: true
+
+  telepathy:
+    enabled: true
+    intercept-before-inventory-add: true
+
+  auto-sell:
+    enabled: true
+    block-if-has-stored: true
+    apply-tax: true
+
+# =========================================================
+# TAX SYSTEM
+# =========================================================
+
+stored-tax:
+  enabled: true
+  tiers:
+    - max: 256
+      percent: 0
+    - max: 1024
+      percent: 3
+    - max: 5000
+      percent: 5
+    - max: -1
+      percent: 8
+
+# =========================================================
+# SELL SYSTEM
+# =========================================================
+
+sell:
+  enabled: true
+  block-normal-sell: true
+
+  economy:
+    hook-vault: true
+    require-vault: true
+
+  economyshopgui-hook:
+    enabled: true
+    calculate-total: true
+    clear-stored-after-sell: true
+    block-if-not-hooked: true
+
+# =========================================================
+# ACTIONBAR
+# =========================================================
+
+actionbar:
+  enabled: true
+  only-if-has-stored: true
+  update-interval-ticks: 10
+  format: "&eStored: &6{stored} &7| Tổng: &f{total}"
+
+# =========================================================
+# TITLE
+# =========================================================
+
+title:
+  empty:
+    enabled: true
+    title: "&cĐÃ HẾT STORED!"
+    subtitle: "&7Item trở lại bình thường"
+    fade-in: 10
+    stay: 40
+    fade-out: 10
+
+# =========================================================
+# ITEM DROP
+# =========================================================
+
+item-drop:
+  enabled: true
+  apply-custom-name: true
+  name-format: "&e[Stored] &f{material}"
+  keep-lore: true
+  prevent-merge-with-normal: true
+  clear-stored-if-despawn: true
+  drop-extra-when-container-full: false
+
+# =========================================================
+# EFFECTS
+# =========================================================
+
+effects:
+  stack:
+    sound:
+      enabled: true
+      sound: ENTITY_EXPERIENCE_ORB_PICKUP
+      volume: 1.0
+      pitch: 1.2
+
+  limit-hit:
+    sound:
+      enabled: true
+      sound: BLOCK_NOTE_BLOCK_BASS
+      volume: 1.0
+      pitch: 0.5
+
+  sell:
+    sound:
+      enabled: true
+      sound: ENTITY_PLAYER_LEVELUP
+      volume: 1.0
+      pitch: 1.0
+
+  error:
+    sound:
+      enabled: true
+      sound: ENTITY_VILLAGER_NO
+      volume: 1.0
+      pitch: 1.0
+
+# =========================================================
+# MESSAGES
+# =========================================================
 
 messages:
-  prefix: "&8[&6StackEngineX&8] "
-  reload: "&aĐã reload StackEngineX."
+  prefix: "&8[&6StackEngine&8] "
+  no-permission: "&cBạn không có quyền."
+  silk-blocked: "&cSilk Touch không hỗ trợ Stored."
+  combat-blocked: "&cĐang combat, không thể refill."
+  sell-success: "&aĐã bán &e{total} &avật phẩm &7(+{money}$)"
+  sell-tax: "&ePhí xử lý: &c-{tax_money}$ &7({tax_percent}%)"
+  autosell-blocked: "&cItem có Stored, không thể AutoSell."
+  reload-success: "&aĐã reload StackEngine."
+  rate-limit-hit: ""
