@@ -1,17 +1,9 @@
 name: StackEngine
-version: 1.0
 main: me.phuc.stackenginex.StackEngine
+version: 1.0
 api-version: 1.21
-author: Pucwinmc
-description: Item Stack Engine
 
 commands:
-  stackenginex:
-    description: Reload plugin
-    usage: /stackenginex reload
-    permission: stackenginex.admin
-    aliases: [sex]
-
-permissions:
-  stackenginex.admin:
-    default: op
+  stack:
+    description: StackEngine main command
+    usage: /stack reload
