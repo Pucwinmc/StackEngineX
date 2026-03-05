@@ -4,9 +4,9 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.NamespacedKey;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
@@ -25,6 +25,7 @@ import java.util.List;
 public class StackEngine extends JavaPlugin implements Listener {
 
     private NamespacedKey storedKey;
+    private final int MAX = 64;
 
     @Override
     public void onEnable() {
@@ -73,49 +74,35 @@ public class StackEngine extends JavaPlugin implements Listener {
         item.setItemMeta(meta);
     }
 
-    // ================= GỘP KHI NHẶT =================
+    // ================= PICKUP FIX (PAPER SAFE) =================
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.MONITOR)
     public void onPickup(EntityPickupItemEvent e) {
 
         if (!(e.getEntity() instanceof Player player)) return;
+        if (e.isCancelled()) return;
 
-        Item entityItem = e.getItem();
-        ItemStack picked = entityItem.getItemStack();
+        ItemStack picked = e.getItem().getItemStack();
 
-        int amount = picked.getAmount();
-        int max = 64;
+        Bukkit.getScheduler().runTaskLater(this, () -> {
 
-        e.setCancelled(true); // chặn vanilla
+            for (ItemStack inv : player.getInventory().getContents()) {
 
-        ItemStack similar = null;
+                if (inv == null) continue;
+                if (inv.getType() != picked.getType()) continue;
 
-        for (ItemStack invItem : player.getInventory().getContents()) {
-            if (invItem == null) continue;
-            if (invItem.getType() != picked.getType()) continue;
+                int current = inv.getAmount();
+                int stored = getStored(inv);
 
-            similar = invItem;
-            break;
-        }
+                if (current > MAX) {
+                    int overflow = current - MAX;
+                    inv.setAmount(MAX);
+                    setStored(inv, stored + overflow);
+                }
 
-        if (similar == null) {
-            player.getInventory().addItem(picked);
-        } else {
-            int current = similar.getAmount();
-            int stored = getStored(similar);
-
-            int total = current + stored + amount;
-
-            if (total <= max) {
-                similar.setAmount(total);
-                clearStored(similar);
-            } else {
-                similar.setAmount(max);
-                setStored(similar, total - max);
             }
-        }
 
-        entityItem.remove();
+        }, 1L);
     }
 
     // ================= AUTO REFILL =================
@@ -139,7 +126,7 @@ public class StackEngine extends JavaPlugin implements Listener {
                     && hand.getAmount() == 0
                     && stored > 0) {
 
-                int refill = Math.min(64, stored);
+                int refill = Math.min(MAX, stored);
 
                 ItemStack newStack = new ItemStack(item.getType());
                 newStack.setAmount(refill);
@@ -156,7 +143,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         }, 1L);
     }
 
-    // ================= UNSTACK KHI BỎ VÀO CONTAINER =================
+    // ================= UNSTACK WHEN PUT INTO CONTAINER =================
 
     @EventHandler
     public void onClick(InventoryClickEvent e) {
@@ -174,7 +161,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         if (!(clicked.getHolder() instanceof Player)) {
 
             clearStored(item);
-            item.setAmount(Math.min(64, item.getAmount()));
+            item.setAmount(Math.min(MAX, item.getAmount()));
             e.setCurrentItem(item);
         }
     }
