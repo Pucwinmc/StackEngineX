@@ -3,15 +3,11 @@ package me.phuc.stackenginex;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -27,12 +23,6 @@ public final class StackEngine extends JavaPlugin implements Listener {
         getLogger().info("StackEngine enabled!");
     }
 
-    @Override
-    public void onDisable() {
-        getLogger().info("StackEngine disabled!");
-    }
-
-    // TEST EVENT - để biết plugin có hoạt động không
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
         e.getPlayer().sendMessage("§a[StackEngine] Plugin đang hoạt động!");
@@ -42,15 +32,12 @@ public final class StackEngine extends JavaPlugin implements Listener {
         if (item == null) return false;
         if (!item.hasItemMeta()) return false;
         ItemMeta meta = item.getItemMeta();
-        if (meta == null) return false;
-        return meta.hasLore();
+        return meta != null && meta.hasLore();
     }
 
     private int getStoredAmount(ItemStack item) {
         ItemMeta meta = item.getItemMeta();
-        if (meta == null) return 0;
-        if (!meta.hasLore()) return 0;
-
+        if (meta == null || !meta.hasLore()) return 0;
         String line = meta.getLore().get(0);
         return Integer.parseInt(line.replace("§7Stored: ", ""));
     }
@@ -72,49 +59,40 @@ public final class StackEngine extends JavaPlugin implements Listener {
 
         if (!(event.getEntity() instanceof Player player)) return;
 
-        Item itemEntity = event.getItem();
-        ItemStack picked = itemEntity.getItemStack();
+        // Delay 1 tick để Minecraft xử lý xong
+        Bukkit.getScheduler().runTaskLater(this, () -> {
 
-        if (picked == null) return;
-        if (picked.getType() == Material.AIR) return;
+            Material type = event.getItem().getItemStack().getType();
+            int total = 0;
 
-        for (ItemStack content : player.getInventory().getContents()) {
+            // gom tất cả item cùng loại
+            for (ItemStack item : player.getInventory().getContents()) {
+                if (item == null) continue;
+                if (item.getType() != type) continue;
 
-            if (content == null) continue;
-            if (content.getType() != picked.getType()) continue;
-
-            if (isStackItem(content)) {
-
-                int stored = getStoredAmount(content);
-                stored += picked.getAmount();
-
-                setStoredAmount(content, stored);
-
-                event.setCancelled(true);
-                itemEntity.remove();
-                return;
+                if (isStackItem(item)) {
+                    total += getStoredAmount(item);
+                } else {
+                    total += item.getAmount();
+                }
             }
-        }
-    }
 
-    @EventHandler
-    public void onInventoryClick(InventoryClickEvent event) {
+            if (total <= 64) return;
 
-        if (!(event.getWhoClicked() instanceof Player player)) return;
+            // xoá hết item cùng loại
+            for (int i = 0; i < player.getInventory().getSize(); i++) {
+                ItemStack item = player.getInventory().getItem(i);
+                if (item == null) continue;
+                if (item.getType() == type) {
+                    player.getInventory().setItem(i, null);
+                }
+            }
 
-        ItemStack current = event.getCurrentItem();
-        if (!isStackItem(current)) return;
+            // tạo stack block mới
+            ItemStack stackBlock = new ItemStack(type, 1);
+            setStoredAmount(stackBlock, total);
+            player.getInventory().addItem(stackBlock);
 
-        if (event.getClickedInventory() == null) return;
-
-        Inventory inv = event.getClickedInventory();
-
-        if (!(inv.getHolder() instanceof Player)) {
-
-            int stored = getStoredAmount(current);
-
-            inv.addItem(new ItemStack(current.getType(), stored));
-            event.setCurrentItem(null);
-        }
+        }, 1L);
     }
 }
