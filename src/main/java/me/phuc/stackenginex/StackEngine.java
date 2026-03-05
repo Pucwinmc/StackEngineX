@@ -31,7 +31,6 @@ public class StackEngine extends JavaPlugin implements Listener {
     private List<String> loreFormat;
     private final Map<String, Integer> permissionLimits = new HashMap<>();
 
-    // Effect config
     private String storedSound, storedParticle;
     private float storedVolume, storedPitch;
     private int storedParticleCount;
@@ -61,7 +60,6 @@ public class StackEngine extends JavaPlugin implements Listener {
         loreFormat = getConfig().getStringList("stored.lore.format");
 
         actionbarEnabled = getConfig().getBoolean("actionbar.enabled", true);
-
         effectsEnabled = getConfig().getBoolean("effects.enabled", true);
 
         storedSound = getConfig().getString("effects.stored.sound", "ENTITY_EXPERIENCE_ORB_PICKUP");
@@ -90,70 +88,86 @@ public class StackEngine extends JavaPlugin implements Listener {
         }
     }
 
+    // ✅ FIXED getMax
     private int getMax(Player p) {
+
+        int highest = defaultMax;
+
         for (Map.Entry<String, Integer> e : permissionLimits.entrySet()) {
             if (p.hasPermission(e.getKey())) {
-                if (e.getValue() == -1) return -1;
-                return Math.max(1, e.getValue());
+                int value = e.getValue();
+                if (value == -1) return -1;
+                if (value > highest) highest = value;
             }
         }
-        return defaultMax;
+
+        return highest;
     }
 
-    // ================= PICKUP =================
+    // ✅ FIXED PICKUP
     @EventHandler
     public void onPickup(EntityPickupItemEvent e) {
 
         if (!(e.getEntity() instanceof Player player)) return;
 
+        ItemStack picked = e.getItem().getItemStack();
+        if (picked == null) return;
+
+        Material type = picked.getType();
+        if (only64 && type.getMaxStackSize() != 64) return;
+
         Bukkit.getScheduler().runTaskLater(this, () -> {
 
-            ItemStack picked = e.getItem().getItemStack();
-            if (picked == null) return;
-
-            Material type = picked.getType();
-            if (only64 && type.getMaxStackSize() != 64) return;
-
             Inventory inv = player.getInventory();
+            int max = getMax(player);
 
             int total = 0;
+
             for (ItemStack item : inv.getContents()) {
                 if (item == null || item.getType() != type) continue;
+
                 total += item.getAmount();
+
                 Integer stored = getStored(item);
                 if (stored != null) total += stored;
             }
 
-            int max = getMax(player);
-            if (max != -1 && total <= max) return;
+            if (max == -1) return;
+            if (total <= 64) return;
 
-            inv.remove(type);
+            if (total > max) total = max;
 
             int base = 64;
             int storedAmount = total - base;
 
-            ItemStack newItem = new ItemStack(type, base);
+            inv.remove(type);
+
+            ItemStack result = new ItemStack(type, base);
 
             if (storedAmount > 0) {
-                applyStored(newItem, storedAmount, player);
+                applyStored(result, storedAmount, player);
 
                 if (effectsEnabled) {
-                    player.playSound(player.getLocation(),
-                            Sound.valueOf(storedSound), storedVolume, storedPitch);
-                    player.spawnParticle(
-                            Particle.valueOf(storedParticle),
-                            player.getLocation().add(0, 1, 0),
-                            storedParticleCount, 0.5, 0.5, 0.5
-                    );
+                    try {
+                        player.playSound(player.getLocation(),
+                                Sound.valueOf(storedSound), storedVolume, storedPitch);
+                    } catch (Exception ignored) {}
+
+                    try {
+                        player.spawnParticle(
+                                Particle.valueOf(storedParticle),
+                                player.getLocation().add(0, 1, 0),
+                                storedParticleCount, 0.5, 0.5, 0.5
+                        );
+                    } catch (Exception ignored) {}
                 }
             }
 
-            inv.addItem(newItem);
+            inv.addItem(result);
 
         }, 1L);
     }
 
-    // ================= REFILL =================
     @EventHandler
     public void onPlace(BlockPlaceEvent e) {
 
@@ -199,7 +213,6 @@ public class StackEngine extends JavaPlugin implements Listener {
         }, 1L);
     }
 
-    // ================= AUTO CONTAINER =================
     @EventHandler
     public void onInventoryClick(InventoryClickEvent e) {
 
@@ -231,7 +244,6 @@ public class StackEngine extends JavaPlugin implements Listener {
         }
     }
 
-    // ================= STORED CORE =================
     private Integer getStored(ItemStack item) {
         if (item == null || !item.hasItemMeta()) return null;
         return item.getItemMeta().getPersistentDataContainer()
@@ -283,7 +295,6 @@ public class StackEngine extends JavaPlugin implements Listener {
         item.setItemMeta(meta);
     }
 
-    // ================= ACTIONBAR =================
     private void startActionbar() {
 
         if (!actionbarEnabled) return;
