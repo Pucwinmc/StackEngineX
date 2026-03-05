@@ -7,7 +7,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.*;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
-import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
@@ -35,10 +34,6 @@ public class StackEngine extends JavaPlugin implements Listener {
     private List<String> loreFormat;
     private final Map<String, Integer> permissionLimits = new HashMap<>();
 
-    private String storedSound, storedParticle;
-    private float storedVolume, storedPitch;
-    private int storedParticleCount;
-
     private String refillSound;
     private float refillVolume, refillPitch;
 
@@ -65,12 +60,6 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         actionbarEnabled = getConfig().getBoolean("actionbar.enabled", true);
         effectsEnabled = getConfig().getBoolean("effects.enabled", true);
-
-        storedSound = getConfig().getString("effects.stored.sound", "ENTITY_EXPERIENCE_ORB_PICKUP");
-        storedVolume = (float) getConfig().getDouble("effects.stored.volume", 1.0);
-        storedPitch = (float) getConfig().getDouble("effects.stored.pitch", 1.2);
-        storedParticle = getConfig().getString("effects.stored.particle", "VILLAGER_HAPPY");
-        storedParticleCount = getConfig().getInt("effects.stored.particle-count", 20);
 
         // Stored title
         storedTitleEnabled = getConfig().getBoolean("effects.stored.title.enabled", true);
@@ -231,6 +220,59 @@ public class StackEngine extends JavaPlugin implements Listener {
                     p.sendActionBar(ChatColor.translateAlternateColorCodes('&', format));
                 }
             }
-        }.runTaskTimer(this, 2L, 2L); // chạy mỗi 2 tick cho mượt
+        }.runTaskTimer(this, 2L, 2L);
+    }
+
+    // ================= STORAGE SYSTEM =================
+
+    private Integer getStored(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return null;
+        return item.getItemMeta().getPersistentDataContainer()
+                .get(storedKey, PersistentDataType.INTEGER);
+    }
+
+    private void applyStored(ItemStack item, int amount, Player player) {
+
+        ItemMeta meta = item.getItemMeta();
+        meta.getPersistentDataContainer().set(storedKey, PersistentDataType.INTEGER, amount);
+
+        if (glow) {
+            meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        }
+
+        if (loreEnabled && loreFormat != null && !loreFormat.isEmpty()) {
+
+            int total = item.getAmount() + amount;
+            int max = getMax(player);
+
+            String maxString = (max == -1) ? "∞" : String.valueOf(max);
+            String percentString = (max == -1) ? "∞"
+                    : String.format("%.0f", ((double) total / max) * 100);
+
+            List<String> lore = new ArrayList<>();
+
+            for (String line : loreFormat) {
+                line = line.replace("{stored}", String.valueOf(amount))
+                        .replace("{total}", String.valueOf(total))
+                        .replace("{max}", maxString)
+                        .replace("{percent}", percentString);
+
+                lore.add(ChatColor.translateAlternateColorCodes('&', line));
+            }
+
+            meta.setLore(lore);
+        }
+
+        item.setItemMeta(meta);
+    }
+
+    private void clearStored(ItemStack item) {
+        if (!item.hasItemMeta()) return;
+        ItemMeta meta = item.getItemMeta();
+        meta.getPersistentDataContainer().remove(storedKey);
+        meta.setLore(null);
+        meta.removeEnchant(Enchantment.UNBREAKING);
+        item.setItemMeta(meta);
     }
 }
