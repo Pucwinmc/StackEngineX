@@ -7,6 +7,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.*;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
@@ -33,6 +34,10 @@ public class StackEngine extends JavaPlugin implements Listener {
 
     private List<String> loreFormat;
     private final Map<String, Integer> permissionLimits = new HashMap<>();
+
+    private String storedSound, storedParticle;
+    private float storedVolume, storedPitch;
+    private int storedParticleCount;
 
     private String refillSound;
     private float refillVolume, refillPitch;
@@ -61,7 +66,12 @@ public class StackEngine extends JavaPlugin implements Listener {
         actionbarEnabled = getConfig().getBoolean("actionbar.enabled", true);
         effectsEnabled = getConfig().getBoolean("effects.enabled", true);
 
-        // Stored title
+        storedSound = getConfig().getString("effects.stored.sound", "ENTITY_EXPERIENCE_ORB_PICKUP");
+        storedVolume = (float) getConfig().getDouble("effects.stored.volume", 1.0);
+        storedPitch = (float) getConfig().getDouble("effects.stored.pitch", 1.2);
+        storedParticle = getConfig().getString("effects.stored.particle", "VILLAGER_HAPPY");
+        storedParticleCount = getConfig().getInt("effects.stored.particle-count", 20);
+
         storedTitleEnabled = getConfig().getBoolean("effects.stored.title.enabled", true);
         storedTitleMain = getConfig().getString("effects.stored.title.main", "&6Bắt đầu nén!");
         storedTitleSub = getConfig().getString("effects.stored.title.sub", "&eItem đã được lưu trữ");
@@ -118,12 +128,17 @@ public class StackEngine extends JavaPlugin implements Listener {
             int max = getMax(player);
 
             int total = 0;
+            boolean hadStoredBefore = false;
 
             for (ItemStack item : inv.getContents()) {
                 if (item == null || item.getType() != type) continue;
+
                 total += item.getAmount();
                 Integer stored = getStored(item);
-                if (stored != null) total += stored;
+                if (stored != null && stored > 0) {
+                    total += stored;
+                    hadStoredBefore = true;
+                }
             }
 
             if (max == -1 || total <= 64) return;
@@ -138,12 +153,28 @@ public class StackEngine extends JavaPlugin implements Listener {
             if (storedAmount > 0) {
                 applyStored(result, storedAmount, player);
 
-                if (storedTitleEnabled) {
+                if (!hadStoredBefore && storedTitleEnabled) {
                     player.sendTitle(
                             ChatColor.translateAlternateColorCodes('&', storedTitleMain),
                             ChatColor.translateAlternateColorCodes('&', storedTitleSub),
                             storedFadeIn, storedStay, storedFadeOut
                     );
+                }
+
+                if (effectsEnabled) {
+                    try {
+                        player.playSound(player.getLocation(),
+                                Sound.valueOf(storedSound),
+                                storedVolume, storedPitch);
+                    } catch (Exception ignored) {}
+
+                    try {
+                        player.spawnParticle(
+                                Particle.valueOf(storedParticle),
+                                player.getLocation().add(0,1,0),
+                                storedParticleCount, 0.5,0.5,0.5
+                        );
+                    } catch (Exception ignored) {}
                 }
             }
 
@@ -153,41 +184,34 @@ public class StackEngine extends JavaPlugin implements Listener {
     }
 
     @EventHandler
-    public void onPlace(BlockPlaceEvent e) {
+    public void onInventoryClick(InventoryClickEvent e) {
 
-        Player p = e.getPlayer();
-        ItemStack item = e.getItemInHand();
-        Integer stored = getStored(item);
-        if (stored == null || stored <= 0) return;
+        if (e.getView().getTopInventory() == null) return;
+        Inventory top = e.getView().getTopInventory();
+        if (top.getHolder() instanceof Player) return;
 
-        Bukkit.getScheduler().runTaskLater(this, () -> {
+        Bukkit.getScheduler().runTaskLater(this, () -> autoUnstack(top), 1L);
+    }
 
-            ItemStack hand = p.getInventory().getItemInMainHand();
-            if (hand == null) return;
+    private void autoUnstack(Inventory inv) {
 
-            int missing = 64 - hand.getAmount();
-            if (missing <= 0) return;
+        for (int i = 0; i < inv.getSize(); i++) {
 
-            int refill = Math.min(missing, stored);
-            int newStored = stored - refill;
+            ItemStack item = inv.getItem(i);
+            if (item == null) continue;
 
-            hand.setAmount(hand.getAmount() + refill);
+            Integer stored = getStored(item);
+            if (stored == null || stored <= 0) continue;
 
-            if (newStored <= 0) {
-                clearStored(hand);
+            Material type = item.getType();
+            clearStored(item);
 
-                if (refillTitleEnabled) {
-                    p.sendTitle(
-                            ChatColor.translateAlternateColorCodes('&', titleMain),
-                            ChatColor.translateAlternateColorCodes('&', titleSub),
-                            titleFadeIn, titleStay, titleFadeOut
-                    );
-                }
-            } else {
-                applyStored(hand, newStored, p);
+            while (stored > 0) {
+                int give = Math.min(64, stored);
+                inv.addItem(new ItemStack(type, give));
+                stored -= give;
             }
-
-        }, 1L);
+        }
     }
 
     private void startActionbar() {
@@ -222,8 +246,6 @@ public class StackEngine extends JavaPlugin implements Listener {
             }
         }.runTaskTimer(this, 2L, 2L);
     }
-
-    // ================= STORAGE SYSTEM =================
 
     private Integer getStored(ItemStack item) {
         if (item == null || !item.hasItemMeta()) return null;
