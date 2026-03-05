@@ -7,17 +7,15 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryHolder;
-import org.bukkit.inventory.ItemFlag;
-import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class StackEngine extends JavaPlugin implements Listener {
@@ -28,18 +26,17 @@ public class StackEngine extends JavaPlugin implements Listener {
     public void onEnable() {
         storedKey = new NamespacedKey(this, "stored");
         Bukkit.getPluginManager().registerEvents(this, this);
-        getLogger().info("StackEngine Survival Ready");
+        getLogger().info("StackEngine FULL FIXED");
     }
 
     // ===============================
-    // STACK SAU KHI NHẶT ITEM
+    // STACK SAU KHI NHẶT
     // ===============================
     @EventHandler
     public void onPickup(EntityPickupItemEvent e) {
 
         if (!(e.getEntity() instanceof Player player)) return;
 
-        // Delay 1 tick để Minecraft cho item vào inventory trước
         Bukkit.getScheduler().runTaskLater(this, () -> {
 
             Material type = e.getItem().getItemStack().getType();
@@ -47,7 +44,6 @@ public class StackEngine extends JavaPlugin implements Listener {
 
             int total = 0;
 
-            // Cộng tổng tất cả stack cùng loại
             for (ItemStack item : inv.getContents()) {
                 if (item == null) continue;
                 if (item.getType() != type) continue;
@@ -64,7 +60,6 @@ public class StackEngine extends JavaPlugin implements Listener {
 
             if (total <= 64) return;
 
-            // Xoá tất cả stack cùng loại
             for (int i = 0; i < inv.getSize(); i++) {
                 ItemStack item = inv.getItem(i);
                 if (item == null) continue;
@@ -73,7 +68,6 @@ public class StackEngine extends JavaPlugin implements Listener {
                 }
             }
 
-            // Tạo stack mới
             ItemStack newStack = new ItemStack(type, 64);
             int storedAmount = total - 64;
 
@@ -86,14 +80,13 @@ public class StackEngine extends JavaPlugin implements Listener {
             meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
 
             newStack.setItemMeta(meta);
-
             inv.addItem(newStack);
 
         }, 1L);
     }
 
     // ===============================
-    // REFILL KHI ĐẶT BLOCK
+    // FIX REFILL KHÔNG MẤT ITEM
     // ===============================
     @EventHandler
     public void onPlace(BlockPlaceEvent e) {
@@ -109,42 +102,56 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         if (stored == null || stored <= 0) return;
 
+        // REFILL NGAY TRONG EVENT
+        int newStored = stored - 1;
+
+        meta.getPersistentDataContainer()
+                .set(storedKey, PersistentDataType.INTEGER, newStored);
+
+        meta.setLore(List.of("§eStored: §f" + newStored));
+
+        item.setItemMeta(meta);
+
+        // Đảm bảo không mất item khi amount về 0
         Bukkit.getScheduler().runTaskLater(this, () -> {
-
             ItemStack hand = e.getPlayer().getInventory().getItemInMainHand();
-            if (hand == null) return;
+            if (hand == null || hand.getType() == Material.AIR) {
 
-            ItemMeta m = hand.getItemMeta();
-            if (m == null) return;
+                ItemStack restore = new ItemStack(item.getType(), 64);
+                ItemMeta m = restore.getItemMeta();
 
-            int newStored = stored - 1;
+                if (newStored > 0) {
+                    m.getPersistentDataContainer()
+                            .set(storedKey, PersistentDataType.INTEGER, newStored);
+                    m.setLore(List.of("§eStored: §f" + newStored));
+                    m.addEnchant(Enchantment.UNBREAKING, 1, true);
+                    m.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+                }
 
-            if (newStored <= 0) {
-                m.getPersistentDataContainer().remove(storedKey);
-                m.setLore(null);
-                m.removeEnchant(Enchantment.UNBREAKING);
-            } else {
-                m.getPersistentDataContainer()
-                        .set(storedKey, PersistentDataType.INTEGER, newStored);
-                m.setLore(List.of("§eStored: §f" + newStored));
+                restore.setItemMeta(m);
+                e.getPlayer().getInventory().setItemInMainHand(restore);
             }
-
-            hand.setItemMeta(m);
 
         }, 1L);
     }
 
     // ===============================
-    // BỎ VÀO RƯƠNG → UNSTACK
+    // UNSTACK ĐÚNG TRONG RƯƠNG
     // ===============================
     @EventHandler
     public void onChestClick(InventoryClickEvent e) {
 
-        if (e.getClickedInventory() == null) return;
-        if (!(e.getClickedInventory().getHolder() instanceof InventoryHolder)) return;
-        if (e.getCurrentItem() == null) return;
+        if (!(e.getWhoClicked() instanceof Player)) return;
+
+        Inventory top = e.getView().getTopInventory();
+        if (top == null) return;
+
+        // Chỉ khi click vào rương (top inventory)
+        if (e.getClickedInventory() != top) return;
 
         ItemStack item = e.getCurrentItem();
+        if (item == null) return;
+
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return;
 
@@ -155,17 +162,15 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         e.setCancelled(true);
 
-        Inventory chest = e.getClickedInventory();
-
-        // reset item
+        // Reset stack trong rương
         meta.getPersistentDataContainer().remove(storedKey);
         meta.setLore(null);
         meta.removeEnchant(Enchantment.UNBREAKING);
         item.setItemMeta(meta);
 
-        // thêm item dư vào rương
+        // Thêm item dư vào chính RƯƠNG
         for (int i = 0; i < stored; i++) {
-            chest.addItem(new ItemStack(item.getType(), 1));
+            top.addItem(new ItemStack(item.getType(), 1));
         }
     }
 }
