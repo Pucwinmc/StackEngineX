@@ -12,7 +12,7 @@ public class StoredManager {
     private static final NamespacedKey KEY =
             new NamespacedKey(StackEngine.get(), "stored");
 
-    // Lấy số lượng stored
+    // Lấy stored
     public static long getStored(ItemStack item) {
         if (item == null || !item.hasItemMeta()) return 0;
 
@@ -21,7 +21,7 @@ public class StoredManager {
                 .getOrDefault(KEY, PersistentDataType.LONG, 0L);
     }
 
-    // Thêm stored + tự glow
+    // Thêm stored + glow
     public static void addStored(ItemStack item, long amount) {
 
         if (item == null || item.getType().isAir()) return;
@@ -35,20 +35,18 @@ public class StoredManager {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return;
 
-        // Lưu dữ liệu
+        // ===== LƯU STORED =====
         meta.getPersistentDataContainer()
                 .set(KEY, PersistentDataType.LONG, total);
 
-        // Thêm glow nếu chưa có
-        if (!meta.hasEnchant(Enchantment.UNBREAKING)) {
-            meta.addEnchant(Enchantment.UNBREAKING, 1, true);
-            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-        }
+        // ===== FORCE GLOW (CÁCH ỔN ĐỊNH NHẤT) =====
+        meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
 
-        item.setItemMeta(meta);
+        item.setItemMeta(meta); // QUAN TRỌNG NHẤT
     }
 
-    // Xóa glow nếu stored = 0
+    // Xóa glow khi hết stored
     public static void removeGlow(ItemStack item) {
 
         if (item == null || !item.hasItemMeta()) return;
