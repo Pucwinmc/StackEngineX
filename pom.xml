@@ -6,67 +6,39 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>me.phuc</groupId>
-    <artifactId>stackengine</artifactId>
+    <artifactId>stackenginex</artifactId>
     <version>1.0</version>
     <packaging>jar</packaging>
 
-    <name>StackEngine</name>
-    <description>Hardcore Economy Stack System</description>
+    <name>StackEngineX</name>
 
-    <properties>
-        <java.version>17</java.version>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    </properties>
-
-    <!-- Repository -->
     <repositories>
         <repository>
-            <id>papermc</id>
+            <id>papermc-repo</id>
             <url>https://repo.papermc.io/repository/maven-public/</url>
-        </repository>
-
-        <repository>
-            <id>jitpack.io</id>
-            <url>https://jitpack.io</url>
         </repository>
     </repositories>
 
-    <!-- Dependencies -->
     <dependencies>
-
-        <!-- Paper 1.21.4 API -->
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
             <version>1.21.4-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
-
-        <!-- Vault API -->
-        <dependency>
-            <groupId>com.github.MilkBowl</groupId>
-            <artifactId>VaultAPI</artifactId>
-            <version>1.7</version>
-            <scope>provided</scope>
-        </dependency>
-
     </dependencies>
 
-    <!-- Build -->
     <build>
         <plugins>
-
-            <!-- Java 17 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
+                    <source>21</source>
+                    <target>21</target>
                 </configuration>
             </plugin>
-
         </plugins>
     </build>
 
