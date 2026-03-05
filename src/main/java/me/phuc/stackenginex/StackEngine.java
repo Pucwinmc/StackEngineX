@@ -4,10 +4,12 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.NamespacedKey;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
@@ -31,19 +33,17 @@ public class StackEngine extends JavaPlugin implements Listener {
         getLogger().info("StackEngineX Enabled!");
     }
 
-    // ================= STORED =================
+    // ================= STORED SYSTEM =================
 
     private boolean hasStored(ItemStack item) {
         if (item == null || !item.hasItemMeta()) return false;
-        return item.getItemMeta()
-                .getPersistentDataContainer()
+        return item.getItemMeta().getPersistentDataContainer()
                 .has(storedKey, PersistentDataType.INTEGER);
     }
 
     private int getStored(ItemStack item) {
         if (!hasStored(item)) return 0;
-        return item.getItemMeta()
-                .getPersistentDataContainer()
+        return item.getItemMeta().getPersistentDataContainer()
                 .get(storedKey, PersistentDataType.INTEGER);
     }
 
@@ -66,13 +66,56 @@ public class StackEngine extends JavaPlugin implements Listener {
 
     private void clearStored(ItemStack item) {
         if (!item.hasItemMeta()) return;
-
         ItemMeta meta = item.getItemMeta();
         meta.getPersistentDataContainer().remove(storedKey);
         meta.setLore(null);
         meta.removeEnchant(Enchantment.UNBREAKING);
-
         item.setItemMeta(meta);
+    }
+
+    // ================= GỘP KHI NHẶT =================
+
+    @EventHandler
+    public void onPickup(EntityPickupItemEvent e) {
+
+        if (!(e.getEntity() instanceof Player player)) return;
+
+        Item entityItem = e.getItem();
+        ItemStack picked = entityItem.getItemStack();
+
+        int amount = picked.getAmount();
+        int max = 64;
+
+        e.setCancelled(true); // chặn vanilla
+
+        ItemStack similar = null;
+
+        for (ItemStack invItem : player.getInventory().getContents()) {
+            if (invItem == null) continue;
+            if (invItem.getType() != picked.getType()) continue;
+
+            similar = invItem;
+            break;
+        }
+
+        if (similar == null) {
+            player.getInventory().addItem(picked);
+        } else {
+            int current = similar.getAmount();
+            int stored = getStored(similar);
+
+            int total = current + stored + amount;
+
+            if (total <= max) {
+                similar.setAmount(total);
+                clearStored(similar);
+            } else {
+                similar.setAmount(max);
+                setStored(similar, total - max);
+            }
+        }
+
+        entityItem.remove();
     }
 
     // ================= AUTO REFILL =================
@@ -113,7 +156,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         }, 1L);
     }
 
-    // ================= AUTO UNSTACK KHI BỎ VÀO CONTAINER =================
+    // ================= UNSTACK KHI BỎ VÀO CONTAINER =================
 
     @EventHandler
     public void onClick(InventoryClickEvent e) {
@@ -128,7 +171,6 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         if (!hasStored(item)) return;
 
-        // Nếu không phải inventory của player => container
         if (!(clicked.getHolder() instanceof Player)) {
 
             clearStored(item);
