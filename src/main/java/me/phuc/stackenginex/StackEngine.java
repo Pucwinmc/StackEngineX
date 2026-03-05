@@ -111,6 +111,8 @@ public class StackEngine extends JavaPlugin implements Listener {
         return highest;
     }
 
+    // ================= PICKUP =================
+
     @EventHandler
     public void onPickup(EntityPickupItemEvent e) {
 
@@ -128,17 +130,13 @@ public class StackEngine extends JavaPlugin implements Listener {
             int max = getMax(player);
 
             int total = 0;
-            boolean hadStoredBefore = false;
 
             for (ItemStack item : inv.getContents()) {
                 if (item == null || item.getType() != type) continue;
 
                 total += item.getAmount();
                 Integer stored = getStored(item);
-                if (stored != null && stored > 0) {
-                    total += stored;
-                    hadStoredBefore = true;
-                }
+                if (stored != null) total += stored;
             }
 
             if (max == -1 || total <= 64) return;
@@ -152,30 +150,6 @@ public class StackEngine extends JavaPlugin implements Listener {
 
             if (storedAmount > 0) {
                 applyStored(result, storedAmount, player);
-
-                if (!hadStoredBefore && storedTitleEnabled) {
-                    player.sendTitle(
-                            ChatColor.translateAlternateColorCodes('&', storedTitleMain),
-                            ChatColor.translateAlternateColorCodes('&', storedTitleSub),
-                            storedFadeIn, storedStay, storedFadeOut
-                    );
-                }
-
-                if (effectsEnabled) {
-                    try {
-                        player.playSound(player.getLocation(),
-                                Sound.valueOf(storedSound),
-                                storedVolume, storedPitch);
-                    } catch (Exception ignored) {}
-
-                    try {
-                        player.spawnParticle(
-                                Particle.valueOf(storedParticle),
-                                player.getLocation().add(0,1,0),
-                                storedParticleCount, 0.5,0.5,0.5
-                        );
-                    } catch (Exception ignored) {}
-                }
             }
 
             inv.addItem(result);
@@ -183,36 +157,58 @@ public class StackEngine extends JavaPlugin implements Listener {
         }, 1L);
     }
 
+    // ================= AUTO REFILL FIXED =================
+
     @EventHandler
-    public void onInventoryClick(InventoryClickEvent e) {
+    public void onBlockPlace(BlockPlaceEvent e) {
 
-        if (e.getView().getTopInventory() == null) return;
-        Inventory top = e.getView().getTopInventory();
-        if (top.getHolder() instanceof Player) return;
+        Player player = e.getPlayer();
 
-        Bukkit.getScheduler().runTaskLater(this, () -> autoUnstack(top), 1L);
-    }
+        Bukkit.getScheduler().runTaskLater(this, () -> {
 
-    private void autoUnstack(Inventory inv) {
+            ItemStack hand = player.getInventory().getItemInMainHand();
+            if (hand == null) return;
 
-        for (int i = 0; i < inv.getSize(); i++) {
+            Integer stored = getStored(hand);
+            if (stored == null || stored <= 0) return;
 
-            ItemStack item = inv.getItem(i);
-            if (item == null) continue;
+            // Minecraft đã trừ 1 item
+            int amount = hand.getAmount();
 
-            Integer stored = getStored(item);
-            if (stored == null || stored <= 0) continue;
+            // Nếu stack còn dưới 64 và vẫn còn stored
+            if (amount < 64) {
 
-            Material type = item.getType();
-            clearStored(item);
+                hand.setAmount(amount + 1);
 
-            while (stored > 0) {
-                int give = Math.min(64, stored);
-                inv.addItem(new ItemStack(type, give));
-                stored -= give;
+                int newStored = stored - 1;
+
+                if (newStored > 0) {
+                    applyStored(hand, newStored, player);
+                } else {
+                    clearStored(hand);
+
+                    if (refillTitleEnabled) {
+                        player.sendTitle(
+                                ChatColor.translateAlternateColorCodes('&', titleMain),
+                                ChatColor.translateAlternateColorCodes('&', titleSub),
+                                titleFadeIn, titleStay, titleFadeOut
+                        );
+                    }
+                }
+
+                if (effectsEnabled) {
+                    try {
+                        player.playSound(player.getLocation(),
+                                Sound.valueOf(refillSound),
+                                refillVolume, refillPitch);
+                    } catch (Exception ignored) {}
+                }
             }
-        }
+
+        }, 1L);
     }
+
+    // ================= ACTIONBAR =================
 
     private void startActionbar() {
 
@@ -246,6 +242,8 @@ public class StackEngine extends JavaPlugin implements Listener {
             }
         }.runTaskTimer(this, 2L, 2L);
     }
+
+    // ================= STORAGE CORE =================
 
     private Integer getStored(ItemStack item) {
         if (item == null || !item.hasItemMeta()) return null;
