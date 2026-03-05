@@ -1,45 +1,32 @@
-package me.phuc.stackenginex;
+@EventHandler
+public void onBreak(BlockBreakEvent event) {
 
-import org.bukkit.Bukkit;
-import org.bukkit.Material;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
+    if (event.isCancelled()) return;
 
-public class BlockBreakListener implements Listener {
+    Player player = event.getPlayer();
+    ItemStack tool = player.getInventory().getItemInMainHand();
 
-    @EventHandler
-    public void onBreak(BlockBreakEvent e) {
+    if (tool == null || tool.getType().isAir()) return;
 
-        if (!StackEngine.get().getConfig().getBoolean("stored.enabled"))
-            return;
+    Collection<ItemStack> drops = event.getBlock().getDrops(tool);
 
-        var player = e.getPlayer();
-        PlayerInventory inv = player.getInventory();
+    if (drops.isEmpty()) return;
 
-        int empty = 0;
-        for (ItemStack item : inv.getStorageContents()) {
-            if (item == null || item.getType() == Material.AIR)
-                empty++;
+    event.setDropItems(false); // Ngăn drop mặc định
+
+    for (ItemStack drop : drops) {
+
+        HashMap<Integer, ItemStack> leftover =
+                player.getInventory().addItem(drop);
+
+        // Nếu inventory full -> thả phần dư xuống đất
+        if (!leftover.isEmpty()) {
+            for (ItemStack remain : leftover.values()) {
+                player.getWorld().dropItemNaturally(
+                        event.getBlock().getLocation(),
+                        remain
+                );
+            }
         }
-
-        int threshold = StackEngine.get().getConfig()
-                .getInt("stored.start-when-empty-slots-below");
-
-        if (empty > threshold)
-            return;
-
-        e.setDropItems(false);
-
-        ItemStack drop = new ItemStack(e.getBlock().getType(), 1);
-
-        ItemStack inHand = player.getInventory().getItemInMainHand();
-
-        if (inHand == null || inHand.getType() == Material.AIR)
-            return;
-
-        StoredManager.addStored(inHand, 1);
     }
 }
