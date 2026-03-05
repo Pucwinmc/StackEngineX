@@ -1,38 +1,76 @@
-stack:
-  default-max: 128   # Giới hạn stack mặc định
-  only-64-stackable: true  # Chỉ áp dụng với item stack 64
+# ==============================
+# StackEngineX Configuration
+# Author: Phúc Dev 😎
+# ==============================
 
+stack:
+
+  # Số lượng tối đa có thể chứa (64 + stored)
+  # Ví dụ 128 = 1 stack hiển thị + 64 stored
+  default-max: 128
+
+  # Nếu true → chỉ item có max stack = 64 mới được stack
+  # Nếu false → mọi item đều có thể stack
+  only-64-stackable: true
+
+  # Giới hạn theo permission
+  # -1 = không giới hạn
   permission-limits:
-    stack.vip: 256    # Ai có perm này max = 256
-    stack.admin: -1   # -1 = không giới hạn
+    stack.vip: 256
+    stack.mvp: 512
+    stack.unlimited: -1
+
+
 
 stored:
-  glowing-when-stored: true  # Item phát sáng khi có stored
+
+  # Khi item có stored sẽ phát sáng (glow)
+  glowing-when-stored: true
 
   lore:
     enabled: true
+
+    # Các placeholder có thể dùng:
+    # {stored}  = số lượng đang lưu trữ
+    # {total}   = tổng (64 + stored)
+    # {max}     = giới hạn tối đa
+    # {percent} = phần trăm đã dùng
+
     format:
-      - "&7&m------------------"
+      - "&7────────────"
       - "&eStored: &f{stored}"
       - "&eTotal: &f{total}/{max}"
-      - "&eProgress: &f{percent}%"
-      - "&7&m------------------"
+      - "&eUsed: &f{percent}%"
+      - "&7────────────"
 
-actionbar:
-  enabled: true
-  format: "&eStored: {stored} &7| &fTotal: {total}/{max}"
+
 
 effects:
+
   enabled: true
 
+  # ================= STORED (khi bắt đầu nén) =================
   stored:
+
     sound: ENTITY_EXPERIENCE_ORB_PICKUP
     volume: 1.0
     pitch: 1.2
+
     particle: VILLAGER_HAPPY
     particle-count: 20
 
+    title:
+      enabled: true
+      main: "&6Bắt đầu nén!"
+      sub: "&eItem đã được lưu trữ"
+      fade-in: 10
+      stay: 30
+      fade-out: 10
+
+
+  # ================= REFILL (khi dùng hết stored) =================
   refill:
+
     sound: UI_TOAST_CHALLENGE_COMPLETE
     volume: 1.0
     pitch: 1.0
@@ -44,3 +82,17 @@ effects:
       fade-in: 10
       stay: 40
       fade-out: 10
+
+
+
+# ================= ACTIONBAR =================
+actionbar:
+
+  enabled: true
+
+  # Placeholder:
+  # {stored}
+  # {total}
+  # {max}
+
+  format: "&eStored: {stored} &7| &fTotal: {total}/{max}"
