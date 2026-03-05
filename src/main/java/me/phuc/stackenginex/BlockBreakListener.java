@@ -1,31 +1,49 @@
-@EventHandler
-public void onBreak(BlockBreakEvent event) {
+package me.phuc.stackenginex;
 
-    if (event.isCancelled()) return;
+import org.bukkit.Bukkit;
+import org.bukkit.event.Listener;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 
-    Player player = event.getPlayer();
-    ItemStack tool = player.getInventory().getItemInMainHand();
+import java.util.Collection;
+import java.util.HashMap;
 
-    if (tool == null || tool.getType().isAir()) return;
+public class BlockBreakListener implements Listener {
 
-    Collection<ItemStack> drops = event.getBlock().getDrops(tool);
+    @EventHandler
+    public void onBreak(BlockBreakEvent event) {
 
-    if (drops.isEmpty()) return;
+        if (event.isCancelled()) return;
 
-    event.setDropItems(false); // Ngăn drop mặc định
+        Player player = event.getPlayer();
+        ItemStack tool = player.getInventory().getItemInMainHand();
 
-    for (ItemStack drop : drops) {
+        if (tool == null || tool.getType().isAir()) return;
 
-        HashMap<Integer, ItemStack> leftover =
-                player.getInventory().addItem(drop);
+        Collection<ItemStack> drops =
+                event.getBlock().getDrops(tool);
 
-        // Nếu inventory full -> thả phần dư xuống đất
-        if (!leftover.isEmpty()) {
-            for (ItemStack remain : leftover.values()) {
-                player.getWorld().dropItemNaturally(
-                        event.getBlock().getLocation(),
-                        remain
-                );
+        if (drops.isEmpty()) return;
+
+        event.setDropItems(false);
+
+        for (ItemStack drop : drops) {
+
+            // Nếu tool có stored system
+            StoredManager.addStored(tool, drop.getAmount());
+
+            HashMap<Integer, ItemStack> leftover =
+                    player.getInventory().addItem(drop);
+
+            if (!leftover.isEmpty()) {
+                for (ItemStack remain : leftover.values()) {
+                    player.getWorld().dropItemNaturally(
+                            event.getBlock().getLocation(),
+                            remain
+                    );
+                }
             }
         }
     }
