@@ -27,6 +27,10 @@ public class StackEngine extends JavaPlugin implements Listener {
     private boolean loreEnabled;
     private boolean effectsEnabled;
     private boolean refillTitleEnabled;
+    private boolean storedTitleEnabled;
+
+    private String storedTitleMain, storedTitleSub;
+    private int storedFadeIn, storedStay, storedFadeOut;
 
     private List<String> loreFormat;
     private final Map<String, Integer> permissionLimits = new HashMap<>();
@@ -68,6 +72,14 @@ public class StackEngine extends JavaPlugin implements Listener {
         storedParticle = getConfig().getString("effects.stored.particle", "VILLAGER_HAPPY");
         storedParticleCount = getConfig().getInt("effects.stored.particle-count", 20);
 
+        // Stored title
+        storedTitleEnabled = getConfig().getBoolean("effects.stored.title.enabled", true);
+        storedTitleMain = getConfig().getString("effects.stored.title.main", "&6Bắt đầu nén!");
+        storedTitleSub = getConfig().getString("effects.stored.title.sub", "&eItem đã được lưu trữ");
+        storedFadeIn = getConfig().getInt("effects.stored.title.fade-in", 10);
+        storedStay = getConfig().getInt("effects.stored.title.stay", 30);
+        storedFadeOut = getConfig().getInt("effects.stored.title.fade-out", 10);
+
         refillSound = getConfig().getString("effects.refill.sound", "UI_TOAST_CHALLENGE_COMPLETE");
         refillVolume = (float) getConfig().getDouble("effects.refill.volume", 1.0);
         refillPitch = (float) getConfig().getDouble("effects.refill.pitch", 1.0);
@@ -88,11 +100,8 @@ public class StackEngine extends JavaPlugin implements Listener {
         }
     }
 
-    // ✅ FIXED getMax
     private int getMax(Player p) {
-
         int highest = defaultMax;
-
         for (Map.Entry<String, Integer> e : permissionLimits.entrySet()) {
             if (p.hasPermission(e.getKey())) {
                 int value = e.getValue();
@@ -100,11 +109,9 @@ public class StackEngine extends JavaPlugin implements Listener {
                 if (value > highest) highest = value;
             }
         }
-
         return highest;
     }
 
-    // ✅ FIXED PICKUP
     @EventHandler
     public void onPickup(EntityPickupItemEvent e) {
 
@@ -125,41 +132,29 @@ public class StackEngine extends JavaPlugin implements Listener {
 
             for (ItemStack item : inv.getContents()) {
                 if (item == null || item.getType() != type) continue;
-
                 total += item.getAmount();
-
                 Integer stored = getStored(item);
                 if (stored != null) total += stored;
             }
 
-            if (max == -1) return;
-            if (total <= 64) return;
-
+            if (max == -1 || total <= 64) return;
             if (total > max) total = max;
 
-            int base = 64;
-            int storedAmount = total - base;
+            int storedAmount = total - 64;
 
             inv.remove(type);
 
-            ItemStack result = new ItemStack(type, base);
+            ItemStack result = new ItemStack(type, 64);
 
             if (storedAmount > 0) {
                 applyStored(result, storedAmount, player);
 
-                if (effectsEnabled) {
-                    try {
-                        player.playSound(player.getLocation(),
-                                Sound.valueOf(storedSound), storedVolume, storedPitch);
-                    } catch (Exception ignored) {}
-
-                    try {
-                        player.spawnParticle(
-                                Particle.valueOf(storedParticle),
-                                player.getLocation().add(0, 1, 0),
-                                storedParticleCount, 0.5, 0.5, 0.5
-                        );
-                    } catch (Exception ignored) {}
+                if (storedTitleEnabled) {
+                    player.sendTitle(
+                            ChatColor.translateAlternateColorCodes('&', storedTitleMain),
+                            ChatColor.translateAlternateColorCodes('&', storedTitleSub),
+                            storedFadeIn, storedStay, storedFadeOut
+                    );
                 }
             }
 
@@ -190,13 +185,7 @@ public class StackEngine extends JavaPlugin implements Listener {
             hand.setAmount(hand.getAmount() + refill);
 
             if (newStored <= 0) {
-
                 clearStored(hand);
-
-                if (effectsEnabled) {
-                    p.playSound(p.getLocation(),
-                            Sound.valueOf(refillSound), refillVolume, refillPitch);
-                }
 
                 if (refillTitleEnabled) {
                     p.sendTitle(
@@ -205,94 +194,11 @@ public class StackEngine extends JavaPlugin implements Listener {
                             titleFadeIn, titleStay, titleFadeOut
                     );
                 }
-
             } else {
                 applyStored(hand, newStored, p);
             }
 
         }, 1L);
-    }
-
-    @EventHandler
-    public void onInventoryClick(InventoryClickEvent e) {
-
-        if (e.getView().getTopInventory() == null) return;
-        Inventory top = e.getView().getTopInventory();
-        if (top.getHolder() instanceof Player) return;
-
-        Bukkit.getScheduler().runTaskLater(this, () -> autoUnstack(top), 1L);
-    }
-
-    private void autoUnstack(Inventory inv) {
-
-        for (int i = 0; i < inv.getSize(); i++) {
-
-            ItemStack item = inv.getItem(i);
-            if (item == null) continue;
-
-            Integer stored = getStored(item);
-            if (stored == null || stored <= 0) continue;
-
-            Material type = item.getType();
-            clearStored(item);
-
-            while (stored > 0) {
-                int give = Math.min(64, stored);
-                inv.addItem(new ItemStack(type, give));
-                stored -= give;
-            }
-        }
-    }
-
-    private Integer getStored(ItemStack item) {
-        if (item == null || !item.hasItemMeta()) return null;
-        return item.getItemMeta().getPersistentDataContainer()
-                .get(storedKey, PersistentDataType.INTEGER);
-    }
-
-    private void applyStored(ItemStack item, int amount, Player player) {
-
-        ItemMeta meta = item.getItemMeta();
-        meta.getPersistentDataContainer().set(storedKey, PersistentDataType.INTEGER, amount);
-
-        if (glow) {
-            meta.addEnchant(Enchantment.UNBREAKING, 1, true);
-            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-        }
-
-        if (loreEnabled && loreFormat != null && !loreFormat.isEmpty()) {
-
-            int total = item.getAmount() + amount;
-            int max = getMax(player);
-
-            String maxString = (max == -1) ? "∞" : String.valueOf(max);
-            String percentString = (max == -1) ? "∞"
-                    : String.format("%.0f", ((double) total / max) * 100);
-
-            List<String> lore = new ArrayList<>();
-
-            for (String line : loreFormat) {
-                line = line.replace("{stored}", String.valueOf(amount))
-                        .replace("{total}", String.valueOf(total))
-                        .replace("{max}", maxString)
-                        .replace("{percent}", percentString);
-
-                lore.add(ChatColor.translateAlternateColorCodes('&', line));
-            }
-
-            meta.setLore(lore);
-        }
-
-        item.setItemMeta(meta);
-    }
-
-    private void clearStored(ItemStack item) {
-        if (!item.hasItemMeta()) return;
-        ItemMeta meta = item.getItemMeta();
-        meta.getPersistentDataContainer().remove(storedKey);
-        meta.setLore(null);
-        meta.removeEnchant(Enchantment.UNBREAKING);
-        item.setItemMeta(meta);
     }
 
     private void startActionbar() {
@@ -306,7 +212,11 @@ public class StackEngine extends JavaPlugin implements Listener {
 
                     ItemStack item = p.getInventory().getItemInMainHand();
                     Integer stored = getStored(item);
-                    if (stored == null || stored <= 0) continue;
+
+                    if (stored == null || stored <= 0) {
+                        p.sendActionBar("");
+                        continue;
+                    }
 
                     int total = item.getAmount() + stored;
                     int max = getMax(p);
@@ -321,6 +231,6 @@ public class StackEngine extends JavaPlugin implements Listener {
                     p.sendActionBar(ChatColor.translateAlternateColorCodes('&', format));
                 }
             }
-        }.runTaskTimer(this, 20L, 20L);
+        }.runTaskTimer(this, 2L, 2L); // chạy mỗi 2 tick cho mượt
     }
 }
