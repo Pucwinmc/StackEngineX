@@ -23,7 +23,6 @@ public class ItemPickupListener implements Listener {
             if (invItem == null) continue;
             if (!invItem.isSimilar(pickup)) continue;
 
-            // Nếu stack đã đủ 64
             if (invItem.getAmount() >= 64) {
 
                 event.setCancelled(true);
