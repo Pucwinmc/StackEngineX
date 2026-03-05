@@ -19,14 +19,13 @@ import java.util.*;
 public class StackEngine extends JavaPlugin implements Listener {
 
     private NamespacedKey storedKey;
-
     private int defaultMax;
     private boolean only64;
     private boolean glow;
     private boolean loreEnabled;
     private boolean actionbarEnabled;
 
-    private Map<String, Integer> permissionLimits = new HashMap<>();
+    private final Map<String, Integer> permissionLimits = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -38,25 +37,10 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         Bukkit.getPluginManager().registerEvents(this, this);
 
-        if (getCommand("stack") != null) {
-            getCommand("stack").setExecutor((sender, cmd, label, args) -> {
-                if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
-                    reloadConfig();
-                    loadConfigValues();
-                    sender.sendMessage(ChatColor.GREEN + "StackEngine reloaded!");
-                    return true;
-                }
-                return false;
-            });
-        }
-
         startActionbar();
-
-        getLogger().info("StackEngine Loaded Safely!");
     }
 
     private void loadConfigValues() {
-
         defaultMax = Math.max(1, getConfig().getInt("stack.default-max", 128));
         only64 = getConfig().getBoolean("stack.only-64-stackable", true);
         glow = getConfig().getBoolean("stored.glowing-when-stored", true);
@@ -73,7 +57,6 @@ public class StackEngine extends JavaPlugin implements Listener {
     }
 
     private int getMax(Player p) {
-
         for (Map.Entry<String, Integer> e : permissionLimits.entrySet()) {
             if (p.hasPermission(e.getKey())) {
                 if (e.getValue() == -1) return Integer.MAX_VALUE;
@@ -83,7 +66,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         return defaultMax;
     }
 
-    // ================== PICKUP ==================
+    // ================= PICKUP =================
     @EventHandler
     public void onPickup(EntityPickupItemEvent e) {
 
@@ -102,7 +85,6 @@ public class StackEngine extends JavaPlugin implements Listener {
             int total = 0;
             for (ItemStack item : inv.getContents()) {
                 if (item == null || item.getType() != type) continue;
-
                 total += item.getAmount();
                 Integer stored = getStored(item);
                 if (stored != null) total += stored;
@@ -113,59 +95,51 @@ public class StackEngine extends JavaPlugin implements Listener {
 
             inv.remove(type);
 
-            int base = Math.min(64, max);
-            if (base <= 0) return;
-
+            int base = 64;
             int stored = total - base;
 
             ItemStack newItem = new ItemStack(type, base);
             applyStored(newItem, stored);
-
             inv.addItem(newItem);
 
         }, 1L);
     }
 
-    // ================== PLACE REFILL (FIXED) ==================
+    // ================= REFILL CHUẨN =================
     @EventHandler
     public void onPlace(BlockPlaceEvent e) {
 
-        Player player = e.getPlayer();
-        ItemStack beforePlace = e.getItemInHand();
+        Player p = e.getPlayer();
+        ItemStack item = e.getItemInHand();
 
-        Integer stored = getStored(beforePlace);
+        Integer stored = getStored(item);
         if (stored == null || stored <= 0) return;
 
         Bukkit.getScheduler().runTaskLater(this, () -> {
 
-            ItemStack current = player.getInventory().getItemInMainHand();
-            int remainingStored = stored - 1;
+            ItemStack hand = p.getInventory().getItemInMainHand();
+            if (hand == null || hand.getType() == Material.AIR) return;
 
-            // Nếu stack biến mất (trước đó chỉ có 1 block)
-            if (current == null || current.getType() == Material.AIR) {
+            int currentAmount = hand.getAmount();
+            int missingTo64 = 64 - currentAmount;
 
-                if (remainingStored <= 0) return;
+            if (missingTo64 <= 0) return;
 
-                ItemStack refill = new ItemStack(beforePlace.getType(), 1);
-                applyStored(refill, remainingStored);
-                player.getInventory().setItemInMainHand(refill);
-                return;
-            }
+            int refillAmount = Math.min(missingTo64, stored);
+            int newStored = stored - refillAmount;
 
-            // Nếu vẫn còn block trong tay
-            if (current.getType() == beforePlace.getType()) {
+            hand.setAmount(currentAmount + refillAmount);
 
-                if (remainingStored <= 0) {
-                    clearStored(current);
-                } else {
-                    applyStored(current, remainingStored);
-                }
+            if (newStored <= 0) {
+                clearStored(hand);
+            } else {
+                applyStored(hand, newStored);
             }
 
         }, 1L);
     }
 
-    // ================== CONTAINER AUTO UNSTACK ==================
+    // ================= CONTAINER =================
     @EventHandler
     public void onClick(InventoryClickEvent e) {
 
@@ -191,14 +165,13 @@ public class StackEngine extends JavaPlugin implements Listener {
 
             while (stored > 0) {
                 int give = Math.min(64, stored);
-                if (give <= 0) break;
                 inv.addItem(new ItemStack(type, give));
                 stored -= give;
             }
         }
     }
 
-    // ================== STORED ==================
+    // ================= STORED =================
     private Integer getStored(ItemStack item) {
 
         if (item == null || !item.hasItemMeta()) return null;
@@ -215,8 +188,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         }
 
         ItemMeta meta = item.getItemMeta();
-        meta.getPersistentDataContainer()
-                .set(storedKey, PersistentDataType.INTEGER, amount);
+        meta.getPersistentDataContainer().set(storedKey, PersistentDataType.INTEGER, amount);
 
         if (glow) {
             meta.addEnchant(Enchantment.UNBREAKING, 1, true);
@@ -245,7 +217,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         item.setItemMeta(meta);
     }
 
-    // ================== ACTIONBAR ==================
+    // ================= ACTIONBAR =================
     private void startActionbar() {
 
         if (!actionbarEnabled) return;
@@ -272,7 +244,6 @@ public class StackEngine extends JavaPlugin implements Listener {
                     p.sendActionBar(ChatColor.translateAlternateColorCodes('&', format));
                 }
             }
-        }.runTaskTimer(this, 20L,
-                Math.max(10, getConfig().getInt("actionbar.update-interval-ticks", 20)));
+        }.runTaskTimer(this, 20L, 20L);
     }
 }
