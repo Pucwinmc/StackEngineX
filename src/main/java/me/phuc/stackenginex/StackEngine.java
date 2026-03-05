@@ -1,4 +1,4 @@
-package me.phuc.stackengine;
+package me.phuc.stackenginex;
 
 import org.bukkit.*;
 import org.bukkit.entity.Item;
