@@ -1,55 +1,91 @@
-# ==============================
-# StackEngineX Configuration
-# Author: Phúc Dev 😎
-# ==============================
+# ===============================
+#       StackEngine Config
+# ===============================
+# Plugin nén item vượt 64 stack
+# Tác giả: Phúc Dev 😎
+# ===============================
 
+
+# ==========================================
+#              STACK SETTINGS
+# ==========================================
 stack:
 
-  # Số lượng tối đa có thể chứa (64 + stored)
-  # Ví dụ 128 = 1 stack hiển thị + 64 stored
+  # Số lượng tối đa mặc định mà 1 player có thể stack
+  # Ví dụ:
+  # 128 = 2 stack
+  # 256 = 4 stack
+  # -1 = không giới hạn
   default-max: 128
 
-  # Nếu true → chỉ item có max stack = 64 mới được stack
-  # Nếu false → mọi item đều có thể stack
+  # Chỉ cho phép stack item có max stack size = 64
+  # true  = chỉ đá, dirt, cobble, v.v...
+  # false = cho phép cả item 16 stack (ender pearl, egg...)
   only-64-stackable: true
 
+
   # Giới hạn theo permission
-  # -1 = không giới hạn
+  # Nếu player có permission bên dưới thì sẽ override default-max
   permission-limits:
-    stack.vip: 256
-    stack.mvp: 512
-    stack.unlimited: -1
+    stack.limit.vip: 256
+    stack.limit.mvp: 512
+    stack.limit.unlimited: -1
 
 
 
+# ==========================================
+#              STORED SETTINGS
+# ==========================================
 stored:
 
-  # Khi item có stored sẽ phát sáng (glow)
+  # Có làm item phát sáng khi có stored không
   glowing-when-stored: true
 
+
   lore:
+    # Bật / tắt lore hiển thị thông tin
     enabled: true
 
-    # Các placeholder có thể dùng:
+    # Format lore
+    # Placeholder:
     # {stored}  = số lượng đang lưu trữ
-    # {total}   = tổng (64 + stored)
+    # {total}   = tổng số lượng (64 + stored)
     # {max}     = giới hạn tối đa
-    # {percent} = phần trăm đã dùng
-
+    # {percent} = % so với max
     format:
-      - "&7────────────"
-      - "&eStored: &f{stored}"
-      - "&eTotal: &f{total}/{max}"
-      - "&eUsed: &f{percent}%"
-      - "&7────────────"
+      - "&7&m---------------------"
+      - "&6Stored: &e{stored}"
+      - "&6Total: &e{total}/{max}"
+      - "&6Full: &e{percent}%"
+      - "&7&m---------------------"
 
 
 
-effects:
+# ==========================================
+#              ACTIONBAR
+# ==========================================
+actionbar:
 
+  # Hiển thị thanh actionbar khi cầm item có stored
   enabled: true
 
-  # ================= STORED (khi bắt đầu nén) =================
+  # Placeholder giống lore
+  format: "&eStored: {stored} &7| &fTotal: {total}/{max}"
+
+
+
+# ==========================================
+#              EFFECTS
+# ==========================================
+effects:
+
+  # Bật / tắt toàn bộ sound + particle
+  enabled: true
+
+
+  # ---------------------------
+  # Khi bắt đầu nén (stored)
+  # ---------------------------
   stored:
 
     sound: ENTITY_EXPERIENCE_ORB_PICKUP
@@ -68,7 +104,9 @@ effects:
       fade-out: 10
 
 
-  # ================= REFILL (khi dùng hết stored) =================
+  # ---------------------------
+  # Khi hết stored (refill)
+  # ---------------------------
   refill:
 
     sound: UI_TOAST_CHALLENGE_COMPLETE
@@ -82,17 +120,3 @@ effects:
       fade-in: 10
       stay: 40
       fade-out: 10
-
-
-
-# ================= ACTIONBAR =================
-actionbar:
-
-  enabled: true
-
-  # Placeholder:
-  # {stored}
-  # {total}
-  # {max}
-
-  format: "&eStored: {stored} &7| &fTotal: {total}/{max}"
