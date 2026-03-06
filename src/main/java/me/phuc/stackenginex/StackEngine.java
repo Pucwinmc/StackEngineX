@@ -21,18 +21,21 @@ public class StackEngine extends JavaPlugin implements Listener {
 
     private NamespacedKey storedKey;
 
+    private final Set<UUID> merging = new HashSet<>();
+
     @Override
-    public void onEnable(){
+    public void onEnable() {
 
         storedKey = new NamespacedKey(this,"stored");
 
         Bukkit.getPluginManager().registerEvents(this,this);
 
         startActionbar();
+
         startAutoMerge();
     }
 
-    // ================= AUTO MERGE INVENTORY =================
+    // ================= AUTO MERGE =================
 
     private void startAutoMerge(){
 
@@ -43,24 +46,16 @@ public class StackEngine extends JavaPlugin implements Listener {
 
                 for(Player p : Bukkit.getOnlinePlayers()){
 
-                    Set<Material> types = new HashSet<>();
-
                     for(ItemStack item : p.getInventory().getContents()){
 
                         if(item==null) continue;
 
-                        types.add(item.getType());
-                    }
-
-                    for(Material m : types){
-
-                        mergeInventory(p,m);
+                        mergeInventory(p,item.getType());
                     }
                 }
-
             }
 
-        }.runTaskTimer(this,100,100);
+        }.runTaskTimer(this,200,200);
     }
 
     // ================= PICKUP =================
@@ -100,56 +95,59 @@ public class StackEngine extends JavaPlugin implements Listener {
 
     // ================= MERGE INVENTORY =================
 
-    private void mergeInventory(Player player, Material type){
+    private void mergeInventory(Player player,Material type){
+
+        if(merging.contains(player.getUniqueId())) return;
+
+        merging.add(player.getUniqueId());
 
         Inventory inv = player.getInventory();
 
-        ItemStack base = null;
+        int total = 0;
 
-        int stored = 0;
+        List<Integer> slots = new ArrayList<>();
 
         for(int i=0;i<inv.getSize();i++){
 
             ItemStack item = inv.getItem(i);
 
             if(item==null) continue;
+
             if(item.getType()!=type) continue;
 
-            if(base==null){
+            slots.add(i);
 
-                base = item;
+            total += item.getAmount();
 
-                Integer s = getStored(item);
-                if(s!=null) stored += s;
+            Integer stored = getStored(item);
 
-                continue;
-            }
-
-            stored += item.getAmount();
-
-            Integer s = getStored(item);
-            if(s!=null) stored += s;
-
-            inv.setItem(i,null);
+            if(stored!=null) total += stored;
         }
-
-        if(base==null) return;
-
-        int total = base.getAmount()+stored;
 
         if(total<=64){
 
-            base.setAmount(total);
-            clearStored(base);
+            merging.remove(player.getUniqueId());
+
             return;
         }
 
-        base.setAmount(64);
+        for(int slot : slots){
 
-        applyStored(base,total-64);
+            inv.setItem(slot,null);
+        }
+
+        ItemStack stack = new ItemStack(type,64);
+
+        int stored = total-64;
+
+        applyStored(stack,stored);
+
+        inv.addItem(stack);
+
+        merging.remove(player.getUniqueId());
     }
 
-    // ================= PLACE =================
+    // ================= PLACE BLOCK =================
 
     @EventHandler
     public void onPlace(BlockPlaceEvent e){
@@ -194,9 +192,9 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         Player p = e.getPlayer();
 
-        Item item = e.getItemDrop();
+        Item drop = e.getItemDrop();
 
-        createHologram(item);
+        createHologram(drop);
 
         Bukkit.getScheduler().runTaskLater(this,()->{
 
@@ -220,13 +218,14 @@ public class StackEngine extends JavaPlugin implements Listener {
             }
 
             if(hand.getAmount()<64){
+
                 hand.setAmount(64);
             }
 
         },1L);
     }
 
-    // ================= HOLOGRAM (IMPROVED) =================
+    // ================= HOLOGRAM =================
 
     private void createHologram(Item item){
 
@@ -236,7 +235,7 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         if(stored==null) return;
 
-        Location loc = item.getLocation().add(0,0.6,0);
+        Location loc = item.getLocation().add(0,0.5,0);
 
         ArmorStand holo = loc.getWorld().spawn(loc,ArmorStand.class);
 
@@ -245,11 +244,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         holo.setMarker(true);
         holo.setCustomNameVisible(true);
 
-        String name = stack.getType().toString().toLowerCase().replace("_"," ");
-
-        int total = stored + stack.getAmount();
-
-        holo.setCustomName(color("&e"+name+" &7| &f"+total+" blocks"));
+        holo.setCustomName(color("&eStored: &f"+stored+" &7"+stack.getType().name()));
 
         new BukkitRunnable(){
 
@@ -259,11 +254,13 @@ public class StackEngine extends JavaPlugin implements Listener {
                 if(item.isDead() || !item.isValid()){
 
                     holo.remove();
+
                     cancel();
+
                     return;
                 }
 
-                holo.teleport(item.getLocation().add(0,0.6,0));
+                holo.teleport(item.getLocation().add(0,0.5,0));
             }
 
         }.runTaskTimer(this,0,5);
@@ -278,7 +275,7 @@ public class StackEngine extends JavaPlugin implements Listener {
             @Override
             public void run(){
 
-                for(Player p:Bukkit.getOnlinePlayers()){
+                for(Player p : Bukkit.getOnlinePlayers()){
 
                     ItemStack item = p.getInventory().getItemInMainHand();
 
@@ -287,6 +284,7 @@ public class StackEngine extends JavaPlugin implements Listener {
                     if(stored==null || stored<=0){
 
                         p.sendActionBar("");
+
                         continue;
                     }
 
@@ -299,7 +297,7 @@ public class StackEngine extends JavaPlugin implements Listener {
 
             }
 
-        }.runTaskTimer(this,5,5);
+        }.runTaskTimer(this,2,2);
     }
 
     // ================= STORAGE =================
@@ -307,10 +305,10 @@ public class StackEngine extends JavaPlugin implements Listener {
     private Integer getStored(ItemStack item){
 
         if(item==null) return null;
+
         if(!item.hasItemMeta()) return null;
 
-        return item.getItemMeta()
-                .getPersistentDataContainer()
+        return item.getItemMeta().getPersistentDataContainer()
                 .get(storedKey, PersistentDataType.INTEGER);
     }
 
@@ -318,13 +316,11 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         ItemMeta meta=item.getItemMeta();
 
-        meta.getPersistentDataContainer().set(
-                storedKey,
-                PersistentDataType.INTEGER,
-                amount
-        );
+        meta.getPersistentDataContainer().set(storedKey,
+                PersistentDataType.INTEGER,amount);
 
         meta.addEnchant(Enchantment.UNBREAKING,1,true);
+
         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
 
         List<String> lore=new ArrayList<>();
