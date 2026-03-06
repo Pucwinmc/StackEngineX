@@ -17,27 +17,16 @@ public class StackEngine extends JavaPlugin implements Listener {
 
     private NamespacedKey storedKey;
 
-    private int defaultMax;
-    private boolean only64;
-    private boolean glow;
-    private boolean loreEnabled;
-
-    private List<String> loreFormat;
+    private int maxStack = 128;
 
     @Override
     public void onEnable() {
 
         saveDefaultConfig();
 
-        storedKey = new NamespacedKey(this, "stored");
+        maxStack = getConfig().getInt("stack.max",128);
 
-        defaultMax = getConfig().getInt("stack.default-max",128);
-        only64 = getConfig().getBoolean("stack.only-64-stackable",true);
-
-        glow = getConfig().getBoolean("stored.glowing",true);
-
-        loreEnabled = getConfig().getBoolean("stored.lore.enabled",true);
-        loreFormat = getConfig().getStringList("stored.lore.format");
+        storedKey = new NamespacedKey(this,"stored");
 
         Bukkit.getPluginManager().registerEvents(this,this);
     }
@@ -54,15 +43,14 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         Material type = picked.getType();
 
-        if(only64 && type.getMaxStackSize() != 64) return;
+        if(type.getMaxStackSize() != 64) return;
 
-        Bukkit.getScheduler().runTaskLater(this, ()->{
+        Bukkit.getScheduler().runTaskLater(this,()->{
 
             Inventory inv = player.getInventory();
 
             int total = 0;
-
-            ItemStack storedItem = null;
+            ItemStack stackItem = null;
 
             for(ItemStack item : inv.getContents()){
 
@@ -76,37 +64,29 @@ public class StackEngine extends JavaPlugin implements Listener {
                 if(stored != null){
 
                     total += stored;
-                    storedItem = item;
+                    stackItem = item;
+
+                }else if(stackItem == null){
+
+                    stackItem = item;
+
                 }
             }
+
+            if(stackItem == null) return;
 
             if(total <= 64) return;
 
-            if(total > defaultMax) return;
+            if(total > maxStack) return;
 
-            int storedAmount = total - 64;
+            int stored = total - 64;
 
-            if(storedItem == null){
+            stackItem.setAmount(64);
 
-                for(ItemStack item : inv.getContents()){
-
-                    if(item == null) continue;
-                    if(item.getType() != type) continue;
-
-                    storedItem = item;
-                    break;
-                }
-            }
-
-            if(storedItem == null) return;
-
-            storedItem.setAmount(64);
-
-            applyStored(storedItem,storedAmount);
+            applyStored(stackItem,stored);
 
         },1L);
     }
-
 
     // ================= AUTO REFILL =================
 
@@ -124,7 +104,6 @@ public class StackEngine extends JavaPlugin implements Listener {
             Integer stored = getStored(hand);
 
             if(stored == null) return;
-            if(stored <= 0) return;
 
             if(hand.getAmount() < 64){
 
@@ -145,15 +124,14 @@ public class StackEngine extends JavaPlugin implements Listener {
             }
 
         },1L);
-
     }
-
 
     // ================= STORAGE =================
 
     private Integer getStored(ItemStack item){
 
         if(item == null) return null;
+
         if(!item.hasItemMeta()) return null;
 
         return item.getItemMeta()
@@ -168,28 +146,14 @@ public class StackEngine extends JavaPlugin implements Listener {
         meta.getPersistentDataContainer()
                 .set(storedKey, PersistentDataType.INTEGER,amount);
 
-        if(glow){
+        meta.addEnchant(Enchantment.UNBREAKING,1,true);
+        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
 
-            meta.addEnchant(Enchantment.UNBREAKING,1,true);
-            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        List<String> lore = new ArrayList<>();
+        lore.add(ChatColor.GRAY+"Stored: "+ChatColor.YELLOW+amount);
+        lore.add(ChatColor.GRAY+"Total: "+ChatColor.WHITE+(item.getAmount()+amount));
 
-        }
-
-        if(loreEnabled){
-
-            List<String> lore = new ArrayList<>();
-
-            for(String line : loreFormat){
-
-                line = line
-                        .replace("{stored}",String.valueOf(amount))
-                        .replace("{total}",String.valueOf(item.getAmount()+amount));
-
-                lore.add(ChatColor.translateAlternateColorCodes('&',line));
-            }
-
-            meta.setLore(lore);
-        }
+        meta.setLore(lore);
 
         item.setItemMeta(meta);
     }
@@ -208,5 +172,4 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         item.setItemMeta(meta);
     }
-
 }
