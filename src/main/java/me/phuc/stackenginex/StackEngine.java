@@ -6,6 +6,7 @@ import org.bukkit.entity.*;
 import org.bukkit.event.*;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.inventory.*;
@@ -21,8 +22,6 @@ public class StackEngine extends JavaPlugin implements Listener {
 
     private NamespacedKey storedKey;
 
-    private final Set<UUID> merging = new HashSet<>();
-
     @Override
     public void onEnable() {
 
@@ -31,31 +30,6 @@ public class StackEngine extends JavaPlugin implements Listener {
         Bukkit.getPluginManager().registerEvents(this,this);
 
         startActionbar();
-
-        startAutoMerge();
-    }
-
-    // ================= AUTO MERGE =================
-
-    private void startAutoMerge(){
-
-        new BukkitRunnable(){
-
-            @Override
-            public void run(){
-
-                for(Player p : Bukkit.getOnlinePlayers()){
-
-                    for(ItemStack item : p.getInventory().getContents()){
-
-                        if(item==null) continue;
-
-                        mergeInventory(p,item.getType());
-                    }
-                }
-            }
-
-        }.runTaskTimer(this,200,200);
     }
 
     // ================= PICKUP =================
@@ -74,7 +48,26 @@ public class StackEngine extends JavaPlugin implements Listener {
         },2L);
     }
 
-    // ================= OPEN CHEST =================
+    // ================= INVENTORY CLICK =================
+
+    @EventHandler
+    public void onClick(InventoryClickEvent e){
+
+        if(!(e.getWhoClicked() instanceof Player p)) return;
+
+        Bukkit.getScheduler().runTaskLater(this,()->{
+
+            for(ItemStack item : p.getInventory().getContents()){
+
+                if(item==null) continue;
+
+                mergeInventory(p,item.getType());
+            }
+
+        },1L);
+    }
+
+    // ================= OPEN CONTAINER =================
 
     @EventHandler
     public void onOpen(InventoryOpenEvent e){
@@ -93,13 +86,9 @@ public class StackEngine extends JavaPlugin implements Listener {
         },2L);
     }
 
-    // ================= MERGE INVENTORY =================
+    // ================= MERGE =================
 
     private void mergeInventory(Player player,Material type){
-
-        if(merging.contains(player.getUniqueId())) return;
-
-        merging.add(player.getUniqueId());
 
         Inventory inv = player.getInventory();
 
@@ -112,7 +101,6 @@ public class StackEngine extends JavaPlugin implements Listener {
             ItemStack item = inv.getItem(i);
 
             if(item==null) continue;
-
             if(item.getType()!=type) continue;
 
             slots.add(i);
@@ -121,15 +109,10 @@ public class StackEngine extends JavaPlugin implements Listener {
 
             Integer stored = getStored(item);
 
-            if(stored!=null) total += stored;
+            if(stored!=null) total+=stored;
         }
 
-        if(total<=64){
-
-            merging.remove(player.getUniqueId());
-
-            return;
-        }
+        if(total<=64) return;
 
         for(int slot : slots){
 
@@ -143,11 +126,9 @@ public class StackEngine extends JavaPlugin implements Listener {
         applyStored(stack,stored);
 
         inv.addItem(stack);
-
-        merging.remove(player.getUniqueId());
     }
 
-    // ================= PLACE BLOCK =================
+    // ================= PLACE =================
 
     @EventHandler
     public void onPlace(BlockPlaceEvent e){
@@ -192,9 +173,9 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         Player p = e.getPlayer();
 
-        Item drop = e.getItemDrop();
+        Item item = e.getItemDrop();
 
-        createHologram(drop);
+        createHologram(item);
 
         Bukkit.getScheduler().runTaskLater(this,()->{
 
@@ -218,7 +199,6 @@ public class StackEngine extends JavaPlugin implements Listener {
             }
 
             if(hand.getAmount()<64){
-
                 hand.setAmount(64);
             }
 
@@ -235,7 +215,9 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         if(stored==null) return;
 
-        Location loc = item.getLocation().add(0,0.5,0);
+        String name = stack.getType().name().toLowerCase().replace("_"," ");
+
+        Location loc = item.getLocation().add(0,0.6,0);
 
         ArmorStand holo = loc.getWorld().spawn(loc,ArmorStand.class);
 
@@ -244,7 +226,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         holo.setMarker(true);
         holo.setCustomNameVisible(true);
 
-        holo.setCustomName(color("&eStored: &f"+stored+" &7"+stack.getType().name()));
+        holo.setCustomName(color("&e"+name+" &7| &fStored: &a"+stored));
 
         new BukkitRunnable(){
 
@@ -254,13 +236,11 @@ public class StackEngine extends JavaPlugin implements Listener {
                 if(item.isDead() || !item.isValid()){
 
                     holo.remove();
-
                     cancel();
-
                     return;
                 }
 
-                holo.teleport(item.getLocation().add(0,0.5,0));
+                holo.teleport(item.getLocation().add(0,0.6,0));
             }
 
         }.runTaskTimer(this,0,5);
@@ -275,7 +255,7 @@ public class StackEngine extends JavaPlugin implements Listener {
             @Override
             public void run(){
 
-                for(Player p : Bukkit.getOnlinePlayers()){
+                for(Player p:Bukkit.getOnlinePlayers()){
 
                     ItemStack item = p.getInventory().getItemInMainHand();
 
@@ -297,7 +277,7 @@ public class StackEngine extends JavaPlugin implements Listener {
 
             }
 
-        }.runTaskTimer(this,2,2);
+        }.runTaskTimer(this,5,5);
     }
 
     // ================= STORAGE =================
@@ -320,7 +300,6 @@ public class StackEngine extends JavaPlugin implements Listener {
                 PersistentDataType.INTEGER,amount);
 
         meta.addEnchant(Enchantment.UNBREAKING,1,true);
-
         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
 
         List<String> lore=new ArrayList<>();
