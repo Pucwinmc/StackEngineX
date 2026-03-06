@@ -2,13 +2,15 @@ package me.phuc.stackenginex;
 
 import org.bukkit.*;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.entity.Player;
+import org.bukkit.entity.*;
 import org.bukkit.event.*;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -27,6 +29,31 @@ public class StackEngine extends JavaPlugin implements Listener {
         Bukkit.getPluginManager().registerEvents(this,this);
 
         startActionbar();
+
+        startAutoMerge();
+    }
+
+    // ================= AUTO MERGE INVENTORY =================
+
+    private void startAutoMerge(){
+
+        new BukkitRunnable(){
+
+            @Override
+            public void run(){
+
+                for(Player p : Bukkit.getOnlinePlayers()){
+
+                    for(ItemStack item : p.getInventory().getContents()){
+
+                        if(item==null) continue;
+
+                        mergeInventory(p,item.getType());
+                    }
+                }
+            }
+
+        }.runTaskTimer(this,40,40);
     }
 
     // ================= PICKUP =================
@@ -41,6 +68,25 @@ public class StackEngine extends JavaPlugin implements Listener {
         Bukkit.getScheduler().runTaskLater(this,()->{
 
             mergeInventory(player,type);
+
+        },2L);
+    }
+
+    // ================= OPEN CONTAINER =================
+
+    @EventHandler
+    public void onOpen(InventoryOpenEvent e){
+
+        if(!(e.getPlayer() instanceof Player p)) return;
+
+        Bukkit.getScheduler().runTaskLater(this,()->{
+
+            for(ItemStack item : p.getInventory().getContents()){
+
+                if(item==null) continue;
+
+                mergeInventory(p,item.getType());
+            }
 
         },2L);
     }
@@ -122,6 +168,10 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         Player p = e.getPlayer();
 
+        Item item = e.getItemDrop();
+
+        createHologram(item);
+
         Bukkit.getScheduler().runTaskLater(this,()->{
 
             ItemStack hand = p.getInventory().getItemInMainHand();
@@ -148,6 +198,45 @@ public class StackEngine extends JavaPlugin implements Listener {
             }
 
         },1L);
+    }
+
+    // ================= HOLOGRAM =================
+
+    private void createHologram(Item item){
+
+        ItemStack stack = item.getItemStack();
+
+        Integer stored = getStored(stack);
+
+        if(stored==null) return;
+
+        Location loc = item.getLocation().add(0,0.5,0);
+
+        ArmorStand holo = loc.getWorld().spawn(loc,ArmorStand.class);
+
+        holo.setInvisible(true);
+        holo.setGravity(false);
+        holo.setMarker(true);
+        holo.setCustomNameVisible(true);
+
+        holo.setCustomName(color("&eStored: &f"+stored));
+
+        new BukkitRunnable(){
+
+            @Override
+            public void run(){
+
+                if(item.isDead() || !item.isValid()){
+
+                    holo.remove();
+                    cancel();
+                    return;
+                }
+
+                holo.teleport(item.getLocation().add(0,0.5,0));
+            }
+
+        }.runTaskTimer(this,0,5);
     }
 
     // ================= ACTIONBAR =================
