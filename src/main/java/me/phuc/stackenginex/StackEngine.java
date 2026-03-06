@@ -33,7 +33,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         startAutoMerge();
     }
 
-    // ================= AUTO MERGE INVENTORY =================
+    // ================= AUTO MERGE =================
 
     private void startAutoMerge(){
 
@@ -44,11 +44,19 @@ public class StackEngine extends JavaPlugin implements Listener {
 
                 for(Player p : Bukkit.getOnlinePlayers()){
 
+                    Map<Material,Integer> checked = new HashMap<>();
+
                     for(ItemStack item : p.getInventory().getContents()){
 
                         if(item==null) continue;
 
-                        mergeInventory(p,item.getType());
+                        Material type = item.getType();
+
+                        if(checked.containsKey(type)) continue;
+
+                        checked.put(type,1);
+
+                        mergeInventory(p,type);
                     }
                 }
             }
@@ -81,14 +89,22 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         Bukkit.getScheduler().runTaskLater(this,()->{
 
+            Map<Material,Integer> checked = new HashMap<>();
+
             for(ItemStack item : p.getInventory().getContents()){
 
                 if(item==null) continue;
 
-                mergeInventory(p,item.getType());
+                Material type = item.getType();
+
+                if(checked.containsKey(type)) continue;
+
+                checked.put(type,1);
+
+                mergeInventory(p,type);
             }
 
-        },2L);
+        },1L);
     }
 
     // ================= MERGE =================
@@ -107,6 +123,7 @@ public class StackEngine extends JavaPlugin implements Listener {
             total += item.getAmount();
 
             Integer stored = getStored(item);
+
             if(stored!=null) total+=stored;
         }
 
@@ -210,6 +227,12 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         if(stored==null) return;
 
+        String name = stack.getType().toString()
+                .replace("_"," ")
+                .toLowerCase();
+
+        name = name.substring(0,1).toUpperCase()+name.substring(1);
+
         Location loc = item.getLocation().add(0,0.5,0);
 
         ArmorStand holo = loc.getWorld().spawn(loc,ArmorStand.class);
@@ -219,7 +242,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         holo.setMarker(true);
         holo.setCustomNameVisible(true);
 
-        holo.setCustomName(color("&eStored: &f"+stored));
+        holo.setCustomName(color("&f"+name+"\n&eStored: &f"+stored));
 
         new BukkitRunnable(){
 
@@ -270,7 +293,7 @@ public class StackEngine extends JavaPlugin implements Listener {
 
             }
 
-        }.runTaskTimer(this,20,20);
+        }.runTaskTimer(this,5,5);
     }
 
     // ================= STORAGE =================
