@@ -24,31 +24,21 @@ public class StackEngine extends JavaPlugin implements Listener {
     private boolean glow;
     private boolean actionbarEnabled;
     private boolean loreEnabled;
-    private boolean effectsEnabled;
-    private boolean refillTitleEnabled;
-    private boolean storedTitleEnabled;
-
-    private String storedTitleMain, storedTitleSub;
-    private int storedFadeIn, storedStay, storedFadeOut;
 
     private List<String> loreFormat;
+
     private final Map<String, Integer> permissionLimits = new HashMap<>();
-
-    private String storedSound;
-    private float storedVolume, storedPitch;
-
-    private String refillSound;
-    private float refillVolume, refillPitch;
-
-    private String titleMain, titleSub;
-    private int titleFadeIn, titleStay, titleFadeOut;
 
     @Override
     public void onEnable() {
+
         saveDefaultConfig();
         loadConfigValues();
+
         storedKey = new NamespacedKey(this, "stored");
+
         Bukkit.getPluginManager().registerEvents(this, this);
+
         startActionbar();
     }
 
@@ -58,35 +48,14 @@ public class StackEngine extends JavaPlugin implements Listener {
         only64 = getConfig().getBoolean("stack.only-64-stackable", true);
 
         glow = getConfig().getBoolean("stored.glowing-when-stored", true);
+
         loreEnabled = getConfig().getBoolean("stored.lore.enabled", true);
         loreFormat = getConfig().getStringList("stored.lore.format");
 
         actionbarEnabled = getConfig().getBoolean("actionbar.enabled", true);
-        effectsEnabled = getConfig().getBoolean("effects.enabled", true);
-
-        storedSound = getConfig().getString("effects.stored.sound");
-        storedVolume = (float) getConfig().getDouble("effects.stored.volume", 1.0);
-        storedPitch = (float) getConfig().getDouble("effects.stored.pitch", 1.2);
-
-        storedTitleEnabled = getConfig().getBoolean("effects.stored.title.enabled", true);
-        storedTitleMain = getConfig().getString("effects.stored.title.main");
-        storedTitleSub = getConfig().getString("effects.stored.title.sub");
-        storedFadeIn = getConfig().getInt("effects.stored.title.fade-in");
-        storedStay = getConfig().getInt("effects.stored.title.stay");
-        storedFadeOut = getConfig().getInt("effects.stored.title.fade-out");
-
-        refillSound = getConfig().getString("effects.refill.sound");
-        refillVolume = (float) getConfig().getDouble("effects.refill.volume", 1.0);
-        refillPitch = (float) getConfig().getDouble("effects.refill.pitch", 1.0);
-
-        refillTitleEnabled = getConfig().getBoolean("effects.refill.title.enabled", true);
-        titleMain = getConfig().getString("effects.refill.title.main");
-        titleSub = getConfig().getString("effects.refill.title.sub");
-        titleFadeIn = getConfig().getInt("effects.refill.title.fade-in");
-        titleStay = getConfig().getInt("effects.refill.title.stay");
-        titleFadeOut = getConfig().getInt("effects.refill.title.fade-out");
 
         permissionLimits.clear();
+
         ConfigurationSection sec = getConfig().getConfigurationSection("stack.permission-limits");
 
         if (sec != null) {
@@ -123,6 +92,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         if (!(e.getEntity() instanceof Player player)) return;
 
         ItemStack picked = e.getItem().getItemStack();
+
         if (picked == null) return;
 
         Material type = picked.getType();
@@ -136,7 +106,8 @@ public class StackEngine extends JavaPlugin implements Listener {
             int max = getMax(player);
 
             int total = 0;
-            boolean hadStored = false;
+
+            ItemStack storedItem = null;
 
             for (ItemStack item : inv.getContents()) {
 
@@ -147,16 +118,19 @@ public class StackEngine extends JavaPlugin implements Listener {
                 Integer stored = getStored(item);
 
                 if (stored != null) {
+
                     total += stored;
-                    hadStored = true;
+                    storedItem = item;
                 }
             }
 
-            if (max != -1 && total >= max) return;
+            total += picked.getAmount();
+
+            if (max != -1 && total > max) {
+                total = max;
+            }
 
             if (total <= 64) return;
-
-            if (max != -1 && total > max) total = max;
 
             int storedAmount = total - 64;
 
@@ -164,34 +138,14 @@ public class StackEngine extends JavaPlugin implements Listener {
 
             ItemStack result = new ItemStack(type, 64);
 
-            if (storedAmount > 0) {
-
-                applyStored(result, storedAmount, player);
-
-                if (!hadStored && storedTitleEnabled) {
-
-                    player.sendTitle(
-                            color(storedTitleMain),
-                            color(storedTitleSub),
-                            storedFadeIn, storedStay, storedFadeOut
-                    );
-
-                    if (effectsEnabled && storedSound != null) {
-                        try {
-                            player.playSound(player.getLocation(),
-                                    Sound.valueOf(storedSound),
-                                    storedVolume, storedPitch);
-                        } catch (Exception ignored) {}
-                    }
-                }
-            }
+            applyStored(result, storedAmount, player);
 
             inv.addItem(result);
 
         }, 1L);
     }
 
-    // ================= AUTO REFILL =================
+    // ================= BLOCK PLACE =================
 
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent e) {
@@ -206,45 +160,17 @@ public class StackEngine extends JavaPlugin implements Listener {
 
             Integer stored = getStored(hand);
 
-            if (stored == null || stored <= 0) return;
+            if (stored == null) return;
 
-            int amount = hand.getAmount();
+            if (stored <= 0) {
 
-            if (amount < 64) {
-
-                hand.setAmount(amount + 1);
-
-                int newStored = stored - 1;
-
-                if (newStored > 0) {
-
-                    applyStored(hand, newStored, player);
-
-                } else {
-
-                    clearStored(hand);
-
-                    if (refillTitleEnabled) {
-
-                        player.sendTitle(
-                                color(titleMain),
-                                color(titleSub),
-                                titleFadeIn, titleStay, titleFadeOut
-                        );
-                    }
-                }
-
-                if (effectsEnabled && refillSound != null) {
-
-                    try {
-
-                        player.playSound(player.getLocation(),
-                                Sound.valueOf(refillSound),
-                                refillVolume, refillPitch);
-
-                    } catch (Exception ignored) {}
-                }
+                clearStored(hand);
+                return;
             }
+
+            int newStored = stored - 1;
+
+            applyStored(hand, newStored, player);
 
         }, 1L);
     }
@@ -269,7 +195,6 @@ public class StackEngine extends JavaPlugin implements Listener {
                     if (stored == null || stored <= 0) {
 
                         p.sendActionBar("");
-
                         continue;
                     }
 
@@ -277,8 +202,10 @@ public class StackEngine extends JavaPlugin implements Listener {
 
                     int max = getMax(p);
 
-                    String format = getConfig().getString("actionbar.format",
-                            "&eStored: {stored} &7| &fTotal: {total}/{max}");
+                    String format = getConfig().getString(
+                            "actionbar.format",
+                            "&eStored: {stored} &7| &fTotal: {total}/{max}"
+                    );
 
                     format = format
                             .replace("{stored}", String.valueOf(stored))
@@ -287,6 +214,7 @@ public class StackEngine extends JavaPlugin implements Listener {
 
                     p.sendActionBar(color(format));
                 }
+
             }
 
         }.runTaskTimer(this, 2L, 2L);
@@ -304,6 +232,12 @@ public class StackEngine extends JavaPlugin implements Listener {
 
     private void applyStored(ItemStack item, int amount, Player player) {
 
+        if (amount <= 0) {
+
+            clearStored(item);
+            return;
+        }
+
         ItemMeta meta = item.getItemMeta();
 
         meta.getPersistentDataContainer().set(storedKey, PersistentDataType.INTEGER, amount);
@@ -311,7 +245,6 @@ public class StackEngine extends JavaPlugin implements Listener {
         if (glow) {
 
             meta.addEnchant(Enchantment.UNBREAKING, 1, true);
-
             meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
         }
 
