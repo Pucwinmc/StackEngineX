@@ -36,81 +36,45 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         if(!(e.getEntity() instanceof Player player)) return;
 
-        ItemStack picked = e.getItem().getItemStack();
-        if(picked==null) return;
-
-        Material type = picked.getType();
+        Material type = e.getItem().getItemStack().getType();
 
         Bukkit.getScheduler().runTaskLater(this,()->{
 
-            Inventory inv = player.getInventory();
+            mergeInventory(player,type);
 
-            ItemStack stackItem = null;
-
-            for(ItemStack item:inv.getContents()){
-
-                if(item==null) continue;
-                if(item.getType()!=type) continue;
-
-                stackItem=item;
-                break;
-            }
-
-            if(stackItem==null) return;
-
-            int amount = picked.getAmount();
-
-            Integer stored = getStored(stackItem);
-            if(stored==null) stored=0;
-
-            stored+=amount;
-
-            applyStored(stackItem,stored);
-
-        },1L);
+        },2L);
     }
 
-    // ================= DROP =================
+    // ================= MERGE =================
 
-    @EventHandler
-    public void onDrop(PlayerDropItemEvent e){
+    private void mergeInventory(Player player,Material type){
 
-        ItemStack item = e.getItemDrop().getItemStack();
+        Inventory inv = player.getInventory();
 
-        Integer stored = getStored(item);
+        int total = 0;
 
-        if(stored==null || stored<=0) return;
+        for(ItemStack item : inv.getContents()){
 
-        Player p = e.getPlayer();
+            if(item==null) continue;
+            if(item.getType()!=type) continue;
 
-        Bukkit.getScheduler().runTaskLater(this,()->{
+            total += item.getAmount();
 
-            ItemStack hand = p.getInventory().getItemInMainHand();
+            Integer stored = getStored(item);
+            if(stored!=null) total+=stored;
+        }
 
-            if(hand==null) return;
+        if(total<=64) return;
 
-            Integer s = getStored(hand);
+        inv.remove(type);
 
-            if(s==null || s<=0) return;
+        ItemStack stack = new ItemStack(type,64);
 
-            s--;
+        int stored = total-64;
 
-            if(s>0){
+        applyStored(stack,stored);
 
-                applyStored(hand,s);
-
-            }else{
-
-                clearStored(hand);
-
-            }
-
-            if(hand.getAmount()<64){
-
-                hand.setAmount(64);
-            }
-
-        },1L);
+        inv.addItem(stack);
     }
 
     // ================= PLACE =================
@@ -145,9 +109,42 @@ public class StackEngine extends JavaPlugin implements Listener {
                 }else{
 
                     clearStored(hand);
-
                 }
+            }
 
+        },1L);
+    }
+
+    // ================= DROP =================
+
+    @EventHandler
+    public void onDrop(PlayerDropItemEvent e){
+
+        Player p = e.getPlayer();
+
+        Bukkit.getScheduler().runTaskLater(this,()->{
+
+            ItemStack hand = p.getInventory().getItemInMainHand();
+
+            if(hand==null) return;
+
+            Integer stored = getStored(hand);
+
+            if(stored==null || stored<=0) return;
+
+            stored--;
+
+            if(stored>0){
+
+                applyStored(hand,stored);
+
+            }else{
+
+                clearStored(hand);
+            }
+
+            if(hand.getAmount()<64){
+                hand.setAmount(64);
             }
 
         },1L);
@@ -162,7 +159,7 @@ public class StackEngine extends JavaPlugin implements Listener {
             @Override
             public void run(){
 
-                for(Player p : Bukkit.getOnlinePlayers()){
+                for(Player p:Bukkit.getOnlinePlayers()){
 
                     ItemStack item = p.getInventory().getItemInMainHand();
 
@@ -177,7 +174,7 @@ public class StackEngine extends JavaPlugin implements Listener {
 
                     int total = stored + item.getAmount();
 
-                    String msg = "&eStored: &f"+stored+" &7| &aTotal: &f"+total;
+                    String msg="&eStored: &f"+stored+" &7| &aTotal: &f"+total;
 
                     p.sendActionBar(color(msg));
                 }
@@ -201,7 +198,7 @@ public class StackEngine extends JavaPlugin implements Listener {
 
     private void applyStored(ItemStack item,int amount){
 
-        ItemMeta meta = item.getItemMeta();
+        ItemMeta meta=item.getItemMeta();
 
         meta.getPersistentDataContainer().set(storedKey,
                 PersistentDataType.INTEGER,amount);
@@ -209,7 +206,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         meta.addEnchant(Enchantment.UNBREAKING,1,true);
         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
 
-        List<String> lore = new ArrayList<>();
+        List<String> lore=new ArrayList<>();
 
         lore.add(color("&7Stored Blocks"));
         lore.add(color("&e"+amount));
@@ -225,7 +222,7 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         if(!item.hasItemMeta()) return;
 
-        ItemMeta meta = item.getItemMeta();
+        ItemMeta meta=item.getItemMeta();
 
         meta.getPersistentDataContainer().remove(storedKey);
 
