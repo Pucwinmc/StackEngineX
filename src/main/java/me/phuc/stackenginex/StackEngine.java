@@ -16,17 +16,15 @@ import java.util.*;
 public class StackEngine extends JavaPlugin implements Listener {
 
     private NamespacedKey storedKey;
-
     private int maxStack = 128;
 
     @Override
     public void onEnable() {
 
-        saveDefaultConfig();
-
-        maxStack = getConfig().getInt("stack.max",128);
-
         storedKey = new NamespacedKey(this,"stored");
+
+        saveDefaultConfig();
+        maxStack = getConfig().getInt("stack.max",128);
 
         Bukkit.getPluginManager().registerEvents(this,this);
     }
@@ -38,57 +36,68 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         if(!(e.getEntity() instanceof Player player)) return;
 
-        ItemStack picked = e.getItem().getItemStack();
-        if(picked == null) return;
-
-        Material type = picked.getType();
+        Material type = e.getItem().getItemStack().getType();
 
         if(type.getMaxStackSize() != 64) return;
 
         Bukkit.getScheduler().runTaskLater(this,()->{
 
-            Inventory inv = player.getInventory();
+            compressInventory(player,type);
 
-            int total = 0;
-            ItemStack stackItem = null;
+        },2L); // delay 2 tick để item vào inventory
 
-            for(ItemStack item : inv.getContents()){
-
-                if(item == null) continue;
-                if(item.getType() != type) continue;
-
-                total += item.getAmount();
-
-                Integer stored = getStored(item);
-
-                if(stored != null){
-
-                    total += stored;
-                    stackItem = item;
-
-                }else if(stackItem == null){
-
-                    stackItem = item;
-
-                }
-            }
-
-            if(stackItem == null) return;
-
-            if(total <= 64) return;
-
-            if(total > maxStack) return;
-
-            int stored = total - 64;
-
-            stackItem.setAmount(64);
-
-            applyStored(stackItem,stored);
-
-        },1L);
     }
 
-    // ================= AUTO REFILL =================
+    // ================= STACK LOGIC =================
+
+    private void compressInventory(Player player,Material type){
+
+        Inventory inv = player.getInventory();
+
+        int total = 0;
+        ItemStack stackItem = null;
+
+        for(ItemStack item : inv.getContents()){
+
+            if(item == null) continue;
+            if(item.getType() != type) continue;
+
+            total += item.getAmount();
+
+            Integer stored = getStored(item);
+
+            if(stored != null){
+
+                total += stored;
+                stackItem = item;
+
+            }else if(stackItem == null){
+
+                stackItem = item;
+            }
+        }
+
+        if(stackItem == null) return;
+
+        if(total <= 64) return;
+
+        if(total > maxStack) total = maxStack;
+
+        int stored = total - 64;
+
+        inv.remove(type);
+
+        ItemStack result = new ItemStack(type,64);
+
+        if(stored > 0){
+
+            applyStored(result,stored);
+        }
+
+        inv.addItem(result);
+    }
+
+    // ================= PLACE =================
 
     @EventHandler
     public void onPlace(BlockPlaceEvent e){
@@ -118,9 +127,7 @@ public class StackEngine extends JavaPlugin implements Listener {
                 }else{
 
                     applyStored(hand,stored);
-
                 }
-
             }
 
         },1L);
@@ -131,7 +138,6 @@ public class StackEngine extends JavaPlugin implements Listener {
     private Integer getStored(ItemStack item){
 
         if(item == null) return null;
-
         if(!item.hasItemMeta()) return null;
 
         return item.getItemMeta()
