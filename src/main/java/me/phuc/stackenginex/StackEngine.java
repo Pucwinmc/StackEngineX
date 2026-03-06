@@ -7,7 +7,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.*;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
-import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
@@ -35,9 +34,8 @@ public class StackEngine extends JavaPlugin implements Listener {
     private List<String> loreFormat;
     private final Map<String, Integer> permissionLimits = new HashMap<>();
 
-    private String storedSound, storedParticle;
+    private String storedSound;
     private float storedVolume, storedPitch;
-    private int storedParticleCount;
 
     private String refillSound;
     private float refillVolume, refillPitch;
@@ -66,32 +64,31 @@ public class StackEngine extends JavaPlugin implements Listener {
         actionbarEnabled = getConfig().getBoolean("actionbar.enabled", true);
         effectsEnabled = getConfig().getBoolean("effects.enabled", true);
 
-        storedSound = getConfig().getString("effects.stored.sound", "ENTITY_EXPERIENCE_ORB_PICKUP");
+        storedSound = getConfig().getString("effects.stored.sound");
         storedVolume = (float) getConfig().getDouble("effects.stored.volume", 1.0);
         storedPitch = (float) getConfig().getDouble("effects.stored.pitch", 1.2);
-        storedParticle = getConfig().getString("effects.stored.particle", "VILLAGER_HAPPY");
-        storedParticleCount = getConfig().getInt("effects.stored.particle-count", 20);
 
         storedTitleEnabled = getConfig().getBoolean("effects.stored.title.enabled", true);
-        storedTitleMain = getConfig().getString("effects.stored.title.main", "&6Bắt đầu nén!");
-        storedTitleSub = getConfig().getString("effects.stored.title.sub", "&eItem đã được lưu trữ");
-        storedFadeIn = getConfig().getInt("effects.stored.title.fade-in", 10);
-        storedStay = getConfig().getInt("effects.stored.title.stay", 30);
-        storedFadeOut = getConfig().getInt("effects.stored.title.fade-out", 10);
+        storedTitleMain = getConfig().getString("effects.stored.title.main");
+        storedTitleSub = getConfig().getString("effects.stored.title.sub");
+        storedFadeIn = getConfig().getInt("effects.stored.title.fade-in");
+        storedStay = getConfig().getInt("effects.stored.title.stay");
+        storedFadeOut = getConfig().getInt("effects.stored.title.fade-out");
 
-        refillSound = getConfig().getString("effects.refill.sound", "UI_TOAST_CHALLENGE_COMPLETE");
+        refillSound = getConfig().getString("effects.refill.sound");
         refillVolume = (float) getConfig().getDouble("effects.refill.volume", 1.0);
         refillPitch = (float) getConfig().getDouble("effects.refill.pitch", 1.0);
 
         refillTitleEnabled = getConfig().getBoolean("effects.refill.title.enabled", true);
-        titleMain = getConfig().getString("effects.refill.title.main", "&aStored đã hết!");
-        titleSub = getConfig().getString("effects.refill.title.sub", "&eStack trở về bình thường");
-        titleFadeIn = getConfig().getInt("effects.refill.title.fade-in", 10);
-        titleStay = getConfig().getInt("effects.refill.title.stay", 40);
-        titleFadeOut = getConfig().getInt("effects.refill.title.fade-out", 10);
+        titleMain = getConfig().getString("effects.refill.title.main");
+        titleSub = getConfig().getString("effects.refill.title.sub");
+        titleFadeIn = getConfig().getInt("effects.refill.title.fade-in");
+        titleStay = getConfig().getInt("effects.refill.title.stay");
+        titleFadeOut = getConfig().getInt("effects.refill.title.fade-out");
 
         permissionLimits.clear();
         ConfigurationSection sec = getConfig().getConfigurationSection("stack.permission-limits");
+
         if (sec != null) {
             for (String key : sec.getKeys(false)) {
                 permissionLimits.put(key, sec.getInt(key));
@@ -100,14 +97,21 @@ public class StackEngine extends JavaPlugin implements Listener {
     }
 
     private int getMax(Player p) {
+
         int highest = defaultMax;
+
         for (Map.Entry<String, Integer> e : permissionLimits.entrySet()) {
+
             if (p.hasPermission(e.getKey())) {
+
                 int value = e.getValue();
+
                 if (value == -1) return -1;
+
                 if (value > highest) highest = value;
             }
         }
+
         return highest;
     }
 
@@ -122,25 +126,37 @@ public class StackEngine extends JavaPlugin implements Listener {
         if (picked == null) return;
 
         Material type = picked.getType();
+
         if (only64 && type.getMaxStackSize() != 64) return;
 
         Bukkit.getScheduler().runTaskLater(this, () -> {
 
             Inventory inv = player.getInventory();
+
             int max = getMax(player);
 
             int total = 0;
+            boolean hadStored = false;
 
             for (ItemStack item : inv.getContents()) {
+
                 if (item == null || item.getType() != type) continue;
 
                 total += item.getAmount();
+
                 Integer stored = getStored(item);
-                if (stored != null) total += stored;
+
+                if (stored != null) {
+                    total += stored;
+                    hadStored = true;
+                }
             }
 
-            if (max == -1 || total <= 64) return;
-            if (total > max) total = max;
+            if (max != -1 && total >= max) return;
+
+            if (total <= 64) return;
+
+            if (max != -1 && total > max) total = max;
 
             int storedAmount = total - 64;
 
@@ -149,7 +165,25 @@ public class StackEngine extends JavaPlugin implements Listener {
             ItemStack result = new ItemStack(type, 64);
 
             if (storedAmount > 0) {
+
                 applyStored(result, storedAmount, player);
+
+                if (!hadStored && storedTitleEnabled) {
+
+                    player.sendTitle(
+                            color(storedTitleMain),
+                            color(storedTitleSub),
+                            storedFadeIn, storedStay, storedFadeOut
+                    );
+
+                    if (effectsEnabled && storedSound != null) {
+                        try {
+                            player.playSound(player.getLocation(),
+                                    Sound.valueOf(storedSound),
+                                    storedVolume, storedPitch);
+                        } catch (Exception ignored) {}
+                    }
+                }
             }
 
             inv.addItem(result);
@@ -157,7 +191,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         }, 1L);
     }
 
-    // ================= AUTO REFILL FIXED =================
+    // ================= AUTO REFILL =================
 
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent e) {
@@ -167,15 +201,15 @@ public class StackEngine extends JavaPlugin implements Listener {
         Bukkit.getScheduler().runTaskLater(this, () -> {
 
             ItemStack hand = player.getInventory().getItemInMainHand();
+
             if (hand == null) return;
 
             Integer stored = getStored(hand);
+
             if (stored == null || stored <= 0) return;
 
-            // Minecraft đã trừ 1 item
             int amount = hand.getAmount();
 
-            // Nếu stack còn dưới 64 và vẫn còn stored
             if (amount < 64) {
 
                 hand.setAmount(amount + 1);
@@ -183,24 +217,31 @@ public class StackEngine extends JavaPlugin implements Listener {
                 int newStored = stored - 1;
 
                 if (newStored > 0) {
+
                     applyStored(hand, newStored, player);
+
                 } else {
+
                     clearStored(hand);
 
                     if (refillTitleEnabled) {
+
                         player.sendTitle(
-                                ChatColor.translateAlternateColorCodes('&', titleMain),
-                                ChatColor.translateAlternateColorCodes('&', titleSub),
+                                color(titleMain),
+                                color(titleSub),
                                 titleFadeIn, titleStay, titleFadeOut
                         );
                     }
                 }
 
-                if (effectsEnabled) {
+                if (effectsEnabled && refillSound != null) {
+
                     try {
+
                         player.playSound(player.getLocation(),
                                 Sound.valueOf(refillSound),
                                 refillVolume, refillPitch);
+
                     } catch (Exception ignored) {}
                 }
             }
@@ -215,38 +256,48 @@ public class StackEngine extends JavaPlugin implements Listener {
         if (!actionbarEnabled) return;
 
         new BukkitRunnable() {
+
             @Override
             public void run() {
+
                 for (Player p : Bukkit.getOnlinePlayers()) {
 
                     ItemStack item = p.getInventory().getItemInMainHand();
+
                     Integer stored = getStored(item);
 
                     if (stored == null || stored <= 0) {
+
                         p.sendActionBar("");
+
                         continue;
                     }
 
                     int total = item.getAmount() + stored;
+
                     int max = getMax(p);
 
                     String format = getConfig().getString("actionbar.format",
                             "&eStored: {stored} &7| &fTotal: {total}/{max}");
 
-                    format = format.replace("{stored}", String.valueOf(stored))
+                    format = format
+                            .replace("{stored}", String.valueOf(stored))
                             .replace("{total}", String.valueOf(total))
                             .replace("{max}", max == -1 ? "∞" : String.valueOf(max));
 
-                    p.sendActionBar(ChatColor.translateAlternateColorCodes('&', format));
+                    p.sendActionBar(color(format));
                 }
             }
+
         }.runTaskTimer(this, 2L, 2L);
     }
 
-    // ================= STORAGE CORE =================
+    // ================= STORAGE =================
 
     private Integer getStored(ItemStack item) {
+
         if (item == null || !item.hasItemMeta()) return null;
+
         return item.getItemMeta().getPersistentDataContainer()
                 .get(storedKey, PersistentDataType.INTEGER);
     }
@@ -254,31 +305,39 @@ public class StackEngine extends JavaPlugin implements Listener {
     private void applyStored(ItemStack item, int amount, Player player) {
 
         ItemMeta meta = item.getItemMeta();
+
         meta.getPersistentDataContainer().set(storedKey, PersistentDataType.INTEGER, amount);
 
         if (glow) {
+
             meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+
             meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
         }
 
         if (loreEnabled && loreFormat != null && !loreFormat.isEmpty()) {
 
             int total = item.getAmount() + amount;
+
             int max = getMax(player);
 
             String maxString = (max == -1) ? "∞" : String.valueOf(max);
-            String percentString = (max == -1) ? "∞"
+
+            String percentString = (max == -1)
+                    ? "∞"
                     : String.format("%.0f", ((double) total / max) * 100);
 
             List<String> lore = new ArrayList<>();
 
             for (String line : loreFormat) {
-                line = line.replace("{stored}", String.valueOf(amount))
+
+                line = line
+                        .replace("{stored}", String.valueOf(amount))
                         .replace("{total}", String.valueOf(total))
                         .replace("{max}", maxString)
                         .replace("{percent}", percentString);
 
-                lore.add(ChatColor.translateAlternateColorCodes('&', line));
+                lore.add(color(line));
             }
 
             meta.setLore(lore);
@@ -288,11 +347,24 @@ public class StackEngine extends JavaPlugin implements Listener {
     }
 
     private void clearStored(ItemStack item) {
+
         if (!item.hasItemMeta()) return;
+
         ItemMeta meta = item.getItemMeta();
+
         meta.getPersistentDataContainer().remove(storedKey);
+
         meta.setLore(null);
+
         meta.removeEnchant(Enchantment.UNBREAKING);
+
         item.setItemMeta(meta);
+    }
+
+    private String color(String s) {
+
+        if (s == null) return "";
+
+        return ChatColor.translateAlternateColorCodes('&', s);
     }
 }
