@@ -1,33 +1,93 @@
 package me.phuc.stackenginex;
 
 import org.bukkit.*;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.*;
-import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.*;
 
 public class StackEngine extends JavaPlugin implements Listener {
 
     private NamespacedKey storedKey;
-    private int maxStack;
+
+    private int defaultMax;
+    private boolean only64;
+    private boolean glow;
+    private boolean actionbarEnabled;
+    private boolean loreEnabled;
+
+    private List<String> loreFormat;
+
+    private final Map<String,Integer> permissionLimits = new HashMap<>();
 
     @Override
     public void onEnable() {
 
         saveDefaultConfig();
+        loadConfig();
 
         storedKey = new NamespacedKey(this,"stored");
 
-        maxStack = getConfig().getInt("stack.max",128);
-
         Bukkit.getPluginManager().registerEvents(this,this);
+
+        startActionbar();
+    }
+
+    private void loadConfig(){
+
+        defaultMax = getConfig().getInt("stack.default-max",128);
+
+        only64 = getConfig().getBoolean("stack.only-64-stackable",true);
+
+        glow = getConfig().getBoolean("stored.glow",true);
+
+        loreEnabled = getConfig().getBoolean("stored.lore.enabled",true);
+
+        loreFormat = getConfig().getStringList("stored.lore.format");
+
+        actionbarEnabled = getConfig().getBoolean("actionbar.enabled",true);
+
+        permissionLimits.clear();
+
+        ConfigurationSection sec = getConfig().getConfigurationSection("stack.permission-limits");
+
+        if(sec != null){
+
+            for(String key : sec.getKeys(false)){
+
+                permissionLimits.put(key,sec.getInt(key));
+
+            }
+        }
+    }
+
+    private int getMax(Player p){
+
+        int max = defaultMax;
+
+        for(Map.Entry<String,Integer> e : permissionLimits.entrySet()){
+
+            if(p.hasPermission(e.getKey())){
+
+                int v = e.getValue();
+
+                if(v == -1) return -1;
+
+                if(v > max) max = v;
+
+            }
+        }
+
+        return max;
     }
 
     // ================= PICKUP =================
@@ -37,127 +97,189 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         if(!(e.getEntity() instanceof Player player)) return;
 
-        Material type = e.getItem().getItemStack().getType();
+        ItemStack picked = e.getItem().getItemStack();
 
-        if(type.getMaxStackSize() != 64) return;
+        if(picked == null) return;
+
+        Material type = picked.getType();
+
+        if(only64 && type.getMaxStackSize() != 64) return;
 
         Bukkit.getScheduler().runTaskLater(this,()->{
 
-            compress(player,type);
+            Inventory inv = player.getInventory();
 
-        },2L);
-    }
+            int max = getMax(player);
 
-    // ================= STACK ENGINE =================
+            ItemStack storedStack = null;
 
-    private void compress(Player player,Material type){
+            for(ItemStack item : inv.getContents()){
 
-        Inventory inv = player.getInventory();
+                if(item == null) continue;
 
-        int total = 0;
+                if(item.getType() != type) continue;
 
-        List<ItemStack> items = new ArrayList<>();
+                Integer stored = getStored(item);
 
-        for(ItemStack item : inv.getContents()){
+                if(stored != null){
 
-            if(item == null) continue;
-            if(item.getType() != type) continue;
+                    storedStack = item;
 
-            items.add(item);
-
-            total += item.getAmount();
-
-            Integer stored = getStored(item);
-
-            if(stored != null){
-                total += stored;
+                    break;
+                }
             }
-        }
 
-        // chưa đủ để nén
-        if(total <= 64) return;
+            if(storedStack == null) return;
 
-        // đã đạt max → để vanilla xử lý
-        if(total >= maxStack) return;
+            Integer stored = getStored(storedStack);
 
-        int stored = total - 64;
+            if(stored == null) stored = 0;
 
-        // remove từng stack
-        for(ItemStack i : items){
-            inv.remove(i);
-        }
+            int currentTotal = storedStack.getAmount() + stored;
 
-        ItemStack result = new ItemStack(type,64);
+            if(max != -1 && currentTotal >= max) return;
 
-        applyStored(result,stored);
+            int add = picked.getAmount();
 
-        inv.addItem(result);
+            int newTotal = currentTotal + add;
+
+            if(max != -1 && newTotal > max){
+
+                add = max - currentTotal;
+
+                newTotal = max;
+
+            }
+
+            int newStored = newTotal - storedStack.getAmount();
+
+            applyStored(storedStack,newStored,player);
+
+        },1L);
     }
 
-    // ================= PLACE =================
+    // ================= AUTO REFILL =================
 
     @EventHandler
-    public void onPlace(BlockPlaceEvent e){
+    public void onBlockPlace(BlockPlaceEvent e){
 
         Player p = e.getPlayer();
 
         Bukkit.getScheduler().runTaskLater(this,()->{
 
-            ItemStack hand = p.getInventory().getItemInMainHand();
+            ItemStack item = p.getInventory().getItemInMainHand();
 
-            if(hand == null) return;
+            if(item == null) return;
 
-            Integer stored = getStored(hand);
+            Integer stored = getStored(item);
 
-            if(stored == null) return;
+            if(stored == null || stored <= 0) return;
 
-            if(hand.getAmount() < 64){
+            int amount = item.getAmount();
 
-                hand.setAmount(hand.getAmount()+1);
+            if(amount < 64){
+
+                item.setAmount(amount + 1);
 
                 stored--;
 
-                if(stored <= 0){
+                if(stored > 0){
 
-                    clearStored(hand);
+                    applyStored(item,stored,p);
 
                 }else{
 
-                    applyStored(hand,stored);
+                    clearStored(item);
+
                 }
             }
 
         },1L);
     }
 
+    // ================= ACTIONBAR =================
+
+    private void startActionbar(){
+
+        if(!actionbarEnabled) return;
+
+        new BukkitRunnable(){
+
+            @Override
+            public void run(){
+
+                for(Player p : Bukkit.getOnlinePlayers()){
+
+                    ItemStack item = p.getInventory().getItemInMainHand();
+
+                    Integer stored = getStored(item);
+
+                    if(stored == null){
+
+                        p.sendActionBar("");
+
+                        continue;
+                    }
+
+                    int total = item.getAmount() + stored;
+
+                    int max = getMax(p);
+
+                    String text = "&eStored: "+stored+" &7| &fTotal: "+total+"/"+(max==-1?"∞":max);
+
+                    p.sendActionBar(color(text));
+
+                }
+
+            }
+
+        }.runTaskTimer(this,2L,2L);
+    }
+
     // ================= STORAGE =================
 
     private Integer getStored(ItemStack item){
 
-        if(item == null) return null;
-        if(!item.hasItemMeta()) return null;
+        if(item == null || !item.hasItemMeta()) return null;
 
-        return item.getItemMeta()
-                .getPersistentDataContainer()
-                .get(storedKey, PersistentDataType.INTEGER);
+        return item.getItemMeta().getPersistentDataContainer().get(storedKey,PersistentDataType.INTEGER);
     }
 
-    private void applyStored(ItemStack item,int amount){
+    private void applyStored(ItemStack item,int amount,Player player){
 
         ItemMeta meta = item.getItemMeta();
 
-        meta.getPersistentDataContainer()
-                .set(storedKey,PersistentDataType.INTEGER,amount);
+        meta.getPersistentDataContainer().set(storedKey,PersistentDataType.INTEGER,amount);
 
-        meta.addEnchant(Enchantment.UNBREAKING,1,true);
-        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        if(glow){
 
-        List<String> lore = new ArrayList<>();
+            meta.addEnchant(Enchantment.UNBREAKING,1,true);
 
-        lore.add(ChatColor.GRAY+"Stored: "+ChatColor.YELLOW+amount);
-        lore.add(ChatColor.GRAY+"Total: "+ChatColor.WHITE+(item.getAmount()+amount));
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
 
-        meta.setLore(lore);
+        }
+
+        if(loreEnabled && loreFormat != null){
+
+            int total = item.getAmount() + amount;
+
+            int max = getMax(player);
+
+            List<String> lore = new ArrayList<>();
+
+            for(String line : loreFormat){
+
+                line = line
+                        .replace("{stored}",String.valueOf(amount))
+                        .replace("{total}",String.valueOf(total))
+                        .replace("{max}",String.valueOf(max));
+
+                lore.add(color(line));
+
+            }
+
+            meta.setLore(lore);
+        }
 
         item.setItemMeta(meta);
     }
@@ -170,10 +292,15 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         meta.getPersistentDataContainer().remove(storedKey);
 
-        meta.removeEnchant(Enchantment.UNBREAKING);
-
         meta.setLore(null);
 
+        meta.removeEnchant(Enchantment.UNBREAKING);
+
         item.setItemMeta(meta);
+    }
+
+    private String color(String s){
+
+        return ChatColor.translateAlternateColorCodes('&',s);
     }
 }
