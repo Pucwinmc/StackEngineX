@@ -44,7 +44,7 @@ public class StackEngine extends JavaPlugin implements Listener {
 
             compressInventory(player,type);
 
-        },2L); // delay 2 tick để item vào inventory
+        },2L);
 
     }
 
@@ -55,7 +55,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         Inventory inv = player.getInventory();
 
         int total = 0;
-        ItemStack stackItem = null;
+        ItemStack storedItem = null;
 
         for(ItemStack item : inv.getContents()){
 
@@ -69,30 +69,24 @@ public class StackEngine extends JavaPlugin implements Listener {
             if(stored != null){
 
                 total += stored;
-                stackItem = item;
-
-            }else if(stackItem == null){
-
-                stackItem = item;
+                storedItem = item;
             }
         }
 
-        if(stackItem == null) return;
-
+        // Nếu chưa đủ để nén
         if(total <= 64) return;
 
-        if(total > maxStack) total = maxStack;
+        // Nếu đã đạt max → không nén nữa
+        if(total >= maxStack) return;
 
         int stored = total - 64;
 
+        // remove tất cả item loại này
         inv.remove(type);
 
         ItemStack result = new ItemStack(type,64);
 
-        if(stored > 0){
-
-            applyStored(result,stored);
-        }
+        applyStored(result,stored);
 
         inv.addItem(result);
     }
