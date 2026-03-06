@@ -16,14 +16,15 @@ import java.util.*;
 public class StackEngine extends JavaPlugin implements Listener {
 
     private NamespacedKey storedKey;
-    private int maxStack = 128;
+    private int maxStack;
 
     @Override
     public void onEnable() {
 
+        saveDefaultConfig();
+
         storedKey = new NamespacedKey(this,"stored");
 
-        saveDefaultConfig();
         maxStack = getConfig().getInt("stack.max",128);
 
         Bukkit.getPluginManager().registerEvents(this,this);
@@ -42,47 +43,49 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         Bukkit.getScheduler().runTaskLater(this,()->{
 
-            compressInventory(player,type);
+            compress(player,type);
 
         },2L);
-
     }
 
-    // ================= STACK LOGIC =================
+    // ================= STACK ENGINE =================
 
-    private void compressInventory(Player player,Material type){
+    private void compress(Player player,Material type){
 
         Inventory inv = player.getInventory();
 
         int total = 0;
-        ItemStack storedItem = null;
+
+        List<ItemStack> items = new ArrayList<>();
 
         for(ItemStack item : inv.getContents()){
 
             if(item == null) continue;
             if(item.getType() != type) continue;
 
+            items.add(item);
+
             total += item.getAmount();
 
             Integer stored = getStored(item);
 
             if(stored != null){
-
                 total += stored;
-                storedItem = item;
             }
         }
 
-        // Nếu chưa đủ để nén
+        // chưa đủ để nén
         if(total <= 64) return;
 
-        // Nếu đã đạt max → không nén nữa
+        // đã đạt max → để vanilla xử lý
         if(total >= maxStack) return;
 
         int stored = total - 64;
 
-        // remove tất cả item loại này
-        inv.remove(type);
+        // remove từng stack
+        for(ItemStack i : items){
+            inv.remove(i);
+        }
 
         ItemStack result = new ItemStack(type,64);
 
@@ -144,12 +147,13 @@ public class StackEngine extends JavaPlugin implements Listener {
         ItemMeta meta = item.getItemMeta();
 
         meta.getPersistentDataContainer()
-                .set(storedKey, PersistentDataType.INTEGER,amount);
+                .set(storedKey,PersistentDataType.INTEGER,amount);
 
         meta.addEnchant(Enchantment.UNBREAKING,1,true);
         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
 
         List<String> lore = new ArrayList<>();
+
         lore.add(ChatColor.GRAY+"Stored: "+ChatColor.YELLOW+amount);
         lore.add(ChatColor.GRAY+"Total: "+ChatColor.WHITE+(item.getAmount()+amount));
 
