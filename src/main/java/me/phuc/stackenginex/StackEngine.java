@@ -22,18 +22,17 @@ public class StackEngine extends JavaPlugin implements Listener {
     private NamespacedKey storedKey;
 
     @Override
-    public void onEnable() {
+    public void onEnable(){
 
         storedKey = new NamespacedKey(this,"stored");
 
         Bukkit.getPluginManager().registerEvents(this,this);
 
         startActionbar();
-
         startAutoMerge();
     }
 
-    // ================= AUTO MERGE =================
+    // ================= AUTO MERGE INVENTORY =================
 
     private void startAutoMerge(){
 
@@ -44,24 +43,24 @@ public class StackEngine extends JavaPlugin implements Listener {
 
                 for(Player p : Bukkit.getOnlinePlayers()){
 
-                    Map<Material,Integer> checked = new HashMap<>();
+                    Set<Material> types = new HashSet<>();
 
                     for(ItemStack item : p.getInventory().getContents()){
 
                         if(item==null) continue;
 
-                        Material type = item.getType();
+                        types.add(item.getType());
+                    }
 
-                        if(checked.containsKey(type)) continue;
+                    for(Material m : types){
 
-                        checked.put(type,1);
-
-                        mergeInventory(p,type);
+                        mergeInventory(p,m);
                     }
                 }
+
             }
 
-        }.runTaskTimer(this,40,40);
+        }.runTaskTimer(this,100,100);
     }
 
     // ================= PICKUP =================
@@ -80,7 +79,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         },2L);
     }
 
-    // ================= OPEN CONTAINER =================
+    // ================= OPEN CHEST =================
 
     @EventHandler
     public void onOpen(InventoryOpenEvent e){
@@ -89,55 +88,65 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         Bukkit.getScheduler().runTaskLater(this,()->{
 
-            Map<Material,Integer> checked = new HashMap<>();
-
             for(ItemStack item : p.getInventory().getContents()){
 
                 if(item==null) continue;
 
-                Material type = item.getType();
-
-                if(checked.containsKey(type)) continue;
-
-                checked.put(type,1);
-
-                mergeInventory(p,type);
+                mergeInventory(p,item.getType());
             }
 
-        },1L);
+        },2L);
     }
 
-    // ================= MERGE =================
+    // ================= MERGE INVENTORY =================
 
-    private void mergeInventory(Player player,Material type){
+    private void mergeInventory(Player player, Material type){
 
         Inventory inv = player.getInventory();
 
-        int total = 0;
+        ItemStack base = null;
 
-        for(ItemStack item : inv.getContents()){
+        int stored = 0;
+
+        for(int i=0;i<inv.getSize();i++){
+
+            ItemStack item = inv.getItem(i);
 
             if(item==null) continue;
             if(item.getType()!=type) continue;
 
-            total += item.getAmount();
+            if(base==null){
 
-            Integer stored = getStored(item);
+                base = item;
 
-            if(stored!=null) total+=stored;
+                Integer s = getStored(item);
+                if(s!=null) stored += s;
+
+                continue;
+            }
+
+            stored += item.getAmount();
+
+            Integer s = getStored(item);
+            if(s!=null) stored += s;
+
+            inv.setItem(i,null);
         }
 
-        if(total<=64) return;
+        if(base==null) return;
 
-        inv.remove(type);
+        int total = base.getAmount()+stored;
 
-        ItemStack stack = new ItemStack(type,64);
+        if(total<=64){
 
-        int stored = total-64;
+            base.setAmount(total);
+            clearStored(base);
+            return;
+        }
 
-        applyStored(stack,stored);
+        base.setAmount(64);
 
-        inv.addItem(stack);
+        applyStored(base,total-64);
     }
 
     // ================= PLACE =================
@@ -217,7 +226,7 @@ public class StackEngine extends JavaPlugin implements Listener {
         },1L);
     }
 
-    // ================= HOLOGRAM =================
+    // ================= HOLOGRAM (IMPROVED) =================
 
     private void createHologram(Item item){
 
@@ -227,13 +236,7 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         if(stored==null) return;
 
-        String name = stack.getType().toString()
-                .replace("_"," ")
-                .toLowerCase();
-
-        name = name.substring(0,1).toUpperCase()+name.substring(1);
-
-        Location loc = item.getLocation().add(0,0.5,0);
+        Location loc = item.getLocation().add(0,0.6,0);
 
         ArmorStand holo = loc.getWorld().spawn(loc,ArmorStand.class);
 
@@ -242,7 +245,11 @@ public class StackEngine extends JavaPlugin implements Listener {
         holo.setMarker(true);
         holo.setCustomNameVisible(true);
 
-        holo.setCustomName(color("&f"+name+"\n&eStored: &f"+stored));
+        String name = stack.getType().toString().toLowerCase().replace("_"," ");
+
+        int total = stored + stack.getAmount();
+
+        holo.setCustomName(color("&e"+name+" &7| &f"+total+" blocks"));
 
         new BukkitRunnable(){
 
@@ -256,7 +263,7 @@ public class StackEngine extends JavaPlugin implements Listener {
                     return;
                 }
 
-                holo.teleport(item.getLocation().add(0,0.5,0));
+                holo.teleport(item.getLocation().add(0,0.6,0));
             }
 
         }.runTaskTimer(this,0,5);
@@ -280,7 +287,6 @@ public class StackEngine extends JavaPlugin implements Listener {
                     if(stored==null || stored<=0){
 
                         p.sendActionBar("");
-
                         continue;
                     }
 
@@ -301,10 +307,10 @@ public class StackEngine extends JavaPlugin implements Listener {
     private Integer getStored(ItemStack item){
 
         if(item==null) return null;
-
         if(!item.hasItemMeta()) return null;
 
-        return item.getItemMeta().getPersistentDataContainer()
+        return item.getItemMeta()
+                .getPersistentDataContainer()
                 .get(storedKey, PersistentDataType.INTEGER);
     }
 
@@ -312,8 +318,11 @@ public class StackEngine extends JavaPlugin implements Listener {
 
         ItemMeta meta=item.getItemMeta();
 
-        meta.getPersistentDataContainer().set(storedKey,
-                PersistentDataType.INTEGER,amount);
+        meta.getPersistentDataContainer().set(
+                storedKey,
+                PersistentDataType.INTEGER,
+                amount
+        );
 
         meta.addEnchant(Enchantment.UNBREAKING,1,true);
         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
